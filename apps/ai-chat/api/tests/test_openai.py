@@ -6,7 +6,7 @@ import pytest
 from fastapi import HTTPException
 
 from app import model_config
-from app.providers import OpenAIProvider, Usage
+from app.providers import OpenAIProvider, ProviderError, Usage
 
 
 def test_openai_stream_sends_context_and_captures_usage():
@@ -43,7 +43,7 @@ def test_interrupted_provider_stream_fails():
         provider = OpenAIProvider("test-only-key", transport=transport)
         return [part async for part in provider.events([], "configured-test-model", 128)]
 
-    with pytest.raises(ValueError, match="provider_stream_incomplete"):
+    with pytest.raises(ProviderError, match="provider_stream_incomplete"):
         asyncio.run(collect())
 
 

@@ -12,7 +12,7 @@ The application displays **Mock active** when no API key is configured. Mock ans
 
 Use the values in [.env.example](.env.example) through the server environment, the root `.env`, or `docker compose --env-file apps/ai-chat/.env up --build api`. An OpenAI API key and a nonempty `AI_OPENAI_MODELS` JSON mapping are both required for real mode. Each JSON key is an OpenAI text model ID. Each value is a pair of positive integers for input and output prices in **micro-USD per million tokens**. For example, a price of $0.50 per million tokens is entered as `500000`. Use the configured model's current official prices. [OpenAI API pricing](https://platform.openai.com/docs/pricing)
 
-`OPENAI_API_KEY` is read by the API container only. The model selector displays only configured models. Real mode sends the bounded context to OpenAI and persists the model ID plus reported token usage when available. Failed OpenAI requests surface an error with retry. [OpenAI Chat Completions reference](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)
+`OPENAI_API_KEY` is read by the API container only. The model selector displays only configured models. Real mode sends the bounded context to OpenAI and persists the model ID plus reported token usage when available. The history labels unreported token usage as unavailable. Upstream rate limits, timeouts and incomplete streams have separate error states and can be retried from the conversation. [OpenAI Chat Completions reference](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)
 
 | Variable | Default | Enforcement |
 | --- | --- | --- |
@@ -39,6 +39,6 @@ For HMR, run `npm run dev` from `web/` and allow that exact origin. For API inte
 
 ## Deploy and migrate
 
-Build from the repository root with `docker build -f apps/ai-chat/Dockerfile -t chatflow-ai .`. Use HTTPS, an exact HTTPS `APP_ORIGINS`, secure cookies, and deployment-managed secrets. Run `alembic upgrade head` against the AI database before starting the container. Allow streaming without proxy buffering, with an idle timeout above the 10-second heartbeat. Health probes use `/healthz` and `/readyz`. Compose continues to use the existing `chatflow_database` volume. See [migration and architecture notes](../../docs/ai-chat/workspace.md).
+Build from the repository root with `docker build -f apps/ai-chat/Dockerfile -t chatflow-ai .`. Use HTTPS, an exact HTTPS `APP_ORIGINS`, secure cookies, and deployment-managed secrets. Run `alembic upgrade head` against the AI database before starting the container. Allow streaming without proxy buffering, with an idle timeout above the 10-second heartbeat. Health probes use `/healthz` and `/readyz`. Compose continues to use the existing `chatflow_database` volume. See [migration and architecture notes](../../docs/ai-chat/workspace.md) and the [acceptance report](../../docs/ai-chat/acceptance.md).
 
 This branch requires a Docker build context at the repository root. The existing Render service and Demo should continue to run their current deployment until a deliberate rollout is scheduled.

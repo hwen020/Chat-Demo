@@ -2,7 +2,7 @@ import asyncio
 import json
 import re
 from dataclasses import dataclass
-from typing import AsyncIterator
+from typing import AsyncIterator, Protocol, Sequence
 
 import httpx
 
@@ -11,6 +11,28 @@ import httpx
 class Usage:
     input_tokens: int
     output_tokens: int
+
+
+class ModelProvider(Protocol):
+    def events(self, history: Sequence[dict[str, str]], model: str,
+               output_limit: int) -> AsyncIterator[str | Usage]:
+        """Yield reply fragments and optional provider-reported usage."""
+
+
+class ProviderError(Exception):
+    def __init__(self, code):
+        super().__init__(code)
+        self.code = code
+
+
+def classify_status(status):
+    if status == 429:
+        return "provider_rate_limited"
+    if status in {401, 403}:
+        return "provider_credentials"
+    if status in {408, 504}:
+        return "generation_timeout"
+    return "generation_failed"
 
 
 class MockProvider:
@@ -53,22 +75,29 @@ class OpenAIProvider:
                     "store": False,
                 },
             ) as response:
-                response.raise_for_status()
+                if not response.is_success:
+                    raise ProviderError(classify_status(response.status_code))
+                has_content = False
                 async for line in response.aiter_lines():
                     if not line.startswith("data:"):
                         continue
                     payload = line[5:].strip()
                     if payload == "[DONE]":
+                        if not has_content:
+                            raise ProviderError("provider_empty_reply")
                         return
                     chunk = json.loads(payload)
                     if chunk.get("error"):
-                        raise ValueError("provider_error")
+                        raise ProviderError("generation_failed")
                     usage = chunk.get("usage")
                     if usage:
                         yield Usage(usage["prompt_tokens"], usage["completion_tokens"])
                     for choice in chunk.get("choices", []):
+                        if choice.get("finish_reason") == "content_filter":
+                            raise ProviderError("provider_filtered")
                         delta = choice.get("delta") or {}
                         text = delta.get("content") or delta.get("refusal")
                         if text:
+                            has_content = True
                             yield text
-                raise ValueError("provider_stream_incomplete")
+                raise ProviderError("provider_stream_incomplete")

@@ -1,15 +1,16 @@
 import asyncio
-from contextlib import suppress
 import json
 import logging
 import threading
 import time
+from contextlib import suppress
 
-from app.db import engine, query, row, rows
 import httpx
 
+from app.db import engine, query, row, rows
+
 from app.model_config import API_KEY, MODELS
-from app.providers import MockProvider, OpenAIProvider, Usage
+from app.providers import ModelProvider, MockProvider, OpenAIProvider, ProviderError, Usage
 
 log = logging.getLogger("chatflow.worker")
 REPLAY_MINUTES = 15
@@ -52,7 +53,7 @@ def still_running(conn, job):
     return True
 
 
-async def receive(job, stop, provider, history):
+async def receive(job, stop, provider: ModelProvider, history):
     run = job["id"]
     seq = 2
     events = provider.events(history, job["model"], job["output_limit"])
@@ -87,9 +88,10 @@ async def receive(job, stop, provider, history):
                     event(conn, run, seq, "delta", {"text": delta})
                     seq += 1
     finally:
-        if task and not task.done():
-            task.cancel()
-            with suppress(asyncio.CancelledError):
+        if task:
+            if not task.done():
+                task.cancel()
+            with suppress(asyncio.CancelledError, Exception):
                 await task
         await events.aclose()
 
@@ -113,7 +115,11 @@ def generate(job, stop):
         asyncio.run(receive(job, stop, provider, history))
     except Exception as exc:
         log.warning("generation failed run=%s error_type=%s", run, type(exc).__name__)
-        code = "generation_timeout" if isinstance(exc, httpx.TimeoutException) else "generation_failed"
+        code = "generation_failed"
+        if isinstance(exc, ProviderError):
+            code = exc.code
+        elif isinstance(exc, httpx.TimeoutException):
+            code = "generation_timeout"
         with engine.begin() as conn:
             if still_running(conn, job):
                 finish(conn, job, "failed", code)

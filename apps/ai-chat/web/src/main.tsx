@@ -8,7 +8,7 @@ const MarkdownMessage = lazy(() => import('./MarkdownMessage'))
 
 type Account = { id: string; email: string }
 type Conversation = { id: string; title: string }
-type Message = { id: string; seq: number; role: 'user' | 'assistant'; content: string; state: string; generation_id?: string; model?: string; input_tokens?: number; output_tokens?: number }
+type Message = { id: string; seq: number; role: 'user' | 'assistant'; content: string; state: string; generation_id?: string; model?: string; input_tokens?: number; output_tokens?: number; usage_status?: 'mock' | 'reported' | 'pending' | 'unavailable' }
 type History = { messages: Message[]; before: number | null }
 type Pending = { content: string; request_key: string; model?: string; prompt?: string }
 type ModelConfig = { models: string[]; mode: 'mock' | 'openai'; input_limit: number; output_limit: number }
@@ -27,6 +27,11 @@ function messageFor(error: unknown) {
     not_found: 'This conversation is no longer available.',
     generation_timeout: 'The reply timed out. You can send another message.',
     generation_failed: 'The reply could not be completed.',
+    provider_rate_limited: 'OpenAI is rate limiting requests. Wait and then retry the reply.',
+    provider_credentials: 'OpenAI rejected the server credentials or model access.',
+    provider_stream_incomplete: 'The provider ended the stream early. Retry the reply.',
+    provider_empty_reply: 'The provider returned no visible text. Retry the reply.',
+    provider_filtered: 'The provider filtered this reply.',
     generation_cancelled: 'Reply stopped.',
   }
   return error instanceof ApiError && messages[error.code] || 'The request could not finish. Please try again.'
@@ -391,7 +396,8 @@ function Workspace({ account, logout }: { account: Account; logout: () => void }
             <div><strong>{item.role === 'assistant' ? 'ChatFlow' : 'You'}</strong>
               {item.role === 'assistant' && item.model && <small className="message-model">
                 {item.model === 'mock' ? 'Mock reply' : item.model}
-                {item.input_tokens != null && ` | ${item.input_tokens} in / ${item.output_tokens} out`}
+                {item.usage_status === 'unavailable' && ' | Token usage unavailable'}
+                {item.usage_status === 'reported' && ` | ${item.input_tokens} in / ${item.output_tokens} out`}
               </small>}
               {promptEdit?.id === item.id ? <form className="edit-prompt" onSubmit={event => {
                 event.preventDefault(); void regenerate(item, promptEdit.content)

@@ -120,7 +120,11 @@ def messages(conversation: UUID, before: Optional[int] = Query(None, ge=1), acco
     with engine.connect() as conn:
         owned(conn, conversation, account)
         items = rows(conn, """SELECT m.id,m.seq,m.role,m.content,m.state,g.id AS generation_id,
-                                     g.model,g.input_tokens,g.output_tokens
+                                     g.model,g.input_tokens,g.output_tokens,
+                                     CASE WHEN g.model='mock' THEN 'mock'
+                                          WHEN g.input_tokens IS NOT NULL AND g.output_tokens IS NOT NULL THEN 'reported'
+                                          WHEN g.state IN ('queued','running') THEN 'pending'
+                                          WHEN g.id IS NOT NULL THEN 'unavailable' END AS usage_status
                               FROM messages m LEFT JOIN generations g ON g.assistant_message_id=m.id
                               WHERE m.conversation_id=:id AND NOT m.superseded AND m.seq < :before
                               ORDER BY m.seq DESC LIMIT 101""", id=conversation,
