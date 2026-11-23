@@ -6,9 +6,9 @@ services:
     branch: feat/chatflow-monorepo
     dockerfilePath: ./apps/messenger/Dockerfile
     dockerContext: .
-    dockerCommand: sh -c 'alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port "$PORT" --no-access-log --ws-max-size 32768'
+    dockerCommand: sh -c 'alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port "$PORT" --workers 1 --no-access-log --ws-max-size 32768'
     healthCheckPath: /healthz
-    autoDeployTrigger: off
+    autoDeployTrigger: "off"
     envVars:
       - key: PUBLIC_DEMO
         value: "1"
@@ -23,9 +23,9 @@ services:
     branch: feat/chatflow-monorepo
     dockerfilePath: ./apps/ai-chat/Dockerfile
     dockerContext: .
-    dockerCommand: sh -c 'alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port "$PORT" --no-access-log'
+    dockerCommand: sh -c 'alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port "$PORT" --workers 1 --no-access-log'
     healthCheckPath: /healthz
-    autoDeployTrigger: off
+    autoDeployTrigger: "off"
     envVars:
       - key: PUBLIC_DEMO
         value: "1"
