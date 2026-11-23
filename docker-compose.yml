@@ -24,6 +24,12 @@ services:
       DATABASE_URL: postgresql+psycopg://chatflow:${CHATFLOW_DB_PASSWORD:-chatflow}@db:5432/chatflow
       APP_ORIGINS: http://localhost:${AI_PORT:-8080},http://127.0.0.1:${AI_PORT:-8080}
       COOKIE_SECURE: "0"
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AI_OPENAI_MODELS: ${AI_OPENAI_MODELS:-}
+      AI_MAX_INPUT_TOKENS: ${AI_MAX_INPUT_TOKENS:-8192}
+      AI_MAX_OUTPUT_TOKENS: ${AI_MAX_OUTPUT_TOKENS:-1024}
+      AI_USER_DAILY_MICROUSD: ${AI_USER_DAILY_MICROUSD:-250000}
+      AI_GLOBAL_DAILY_MICROUSD: ${AI_GLOBAL_DAILY_MICROUSD:-2000000}
     command: ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-access-log"]
     ports:
       - "127.0.0.1:${AI_PORT:-8080}:8000"

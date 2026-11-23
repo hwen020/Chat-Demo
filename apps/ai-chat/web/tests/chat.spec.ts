@@ -52,3 +52,52 @@ test('register, stream, reload history, rename and delete', async ({ page }, inf
   await expect(history.getByText('No matching conversations')).toHaveCount(0)
   if (mobile) await page.getByRole('button', { name: 'Close conversations' }).click()
 })
+
+
+test('edit, regenerate, and restore a soft-deleted conversation', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'Conversation actions use the same workspace on all viewports')
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Create an account' }).click()
+  await page.getByLabel('Email').fill(randomUUID() + '@example.test')
+  await page.getByLabel('Password').fill('playwright-only-password')
+  await page.getByRole('button', { name: 'Create account', exact: true }).click()
+  await page.getByRole('main').getByRole('button', { name: 'New conversation' }).click()
+  await page.getByLabel('Message', { exact: true }).fill('First synthetic prompt')
+  await page.getByRole('button', { name: 'Send' }).click()
+  await expect(page.getByRole('button', { name: 'Regenerate' })).toBeEnabled()
+  await page.getByRole('button', { name: 'Edit prompt' }).click()
+  await page.getByLabel('Edit prompt').fill('Edited synthetic prompt')
+  await page.getByRole('button', { name: 'Send edit' }).click()
+  await expect(page.locator('.message.assistant .markdown')).toContainText('Edited synthetic prompt')
+  await expect(page.getByRole('button', { name: 'Regenerate' })).toBeEnabled()
+  await page.getByRole('button', { name: 'Regenerate' }).click()
+  await expect(page.getByRole('button', { name: 'Regenerate' })).toBeEnabled()
+  await expect(page.locator('.message')).toHaveCount(2)
+  await page.getByRole('button', { name: 'Delete', exact: true }).click()
+  await page.getByRole('button', { name: 'Delete conversation' }).click()
+  await page.getByRole('button', { name: 'Recently deleted' }).click()
+  await page.getByRole('button', { name: 'Restore', exact: true }).click()
+  await expect(page.locator('.message.assistant .markdown')).toContainText('Edited synthetic prompt')
+  await page.route('**/v1/conversations/*/messages', async route => {
+    const response = await route.fetch()
+    const history = await response.json()
+    history.messages.at(-1).content = [
+      '**Rendered Markdown**',
+      '',
+      '```typescript',
+      'const answer = 42',
+      '```',
+      '',
+      '<span data-raw-markup="true">Raw markup</span>',
+      '',
+      '![Suppressed image](https://example.test/image.png)',
+    ].join('\n')
+    await route.fulfill({ response, json: history })
+  })
+  await page.reload()
+  const markdown = page.locator('.message.assistant .markdown')
+  await expect(markdown.locator('strong')).toHaveText('Rendered Markdown')
+  await expect(markdown.locator('.hljs-keyword')).toHaveText('const')
+  await expect(markdown.locator('img, [data-raw-markup]')).toHaveCount(0)
+
+})

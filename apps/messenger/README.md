@@ -24,6 +24,8 @@ In `apps/messenger/web`, run `npm ci` and `npm run dev -- --host 127.0.0.1`. Vit
 
 For the integration suite, use a fresh test database, set `COOKIE_SECURE=0` and `APP_ORIGINS=http://127.0.0.1:5173`, migrate it, then run `python -m pytest -q` from `api/`. Tests cover registration and login, session revocation, direct and group chat, search, persistence, socket delivery and replay, and access checks.
 
+For the two-browser-session workflow, start an isolated Messenger instance, set `MESSENGER_WEB` to its URL, and run `npx playwright install chromium` and `npm test` from `web/`. The browser test registers synthetic accounts and checks direct and group delivery.
+
 ## Deploy
 
 From the repository root, build with `docker build -f apps/messenger/Dockerfile -t chatflow-messenger .`. Provision a dedicated database, set `DATABASE_URL` and the exact HTTPS `APP_ORIGINS`, keep `COOKIE_SECURE=1`, and run `alembic upgrade head` before starting the container. Route HTTP and WebSocket upgrades to the container port 8000. Check `/healthz` and `/readyz`. See [architecture](../../docs/messenger/architecture.md).

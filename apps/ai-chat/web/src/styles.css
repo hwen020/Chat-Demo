@@ -109,3 +109,26 @@ button { font-weight: 650 }
   .top h1 { font-size: 15px }
   .rename { min-width: 0 }
 }
+
+.trash { border-top: 1px solid #303042; padding: .4rem .8rem; }
+.trash-list { max-height: 9rem; overflow: auto; font-size: .8rem; }
+.trash-list > div { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .25rem; }
+.trash-list span { overflow-wrap: anywhere; }
+.message .message-model { display: block; font-size: .75rem; margin: .18rem 0; }
+.message-actions { display: flex; flex-wrap: wrap; gap: .2rem; margin-top: .3rem; }
+.message-actions .plain { padding: .25rem .45rem; font-size: .78rem; }
+.edit-prompt label { display: grid; gap: .3rem; }
+.edit-prompt textarea { width: 100%; min-height: 5rem; resize: vertical; }
+.markdown { min-width: 0; overflow-wrap: anywhere; }
+.markdown p { white-space: normal; }
+.markdown p + p { margin-top: .8rem; }
+.markdown pre { overflow: auto; padding: .8rem; border-radius: .6rem; background: #121622; color: #e6edf7; }
+.markdown code { font-family: ui-monospace, monospace; }
+.markdown table { display: block; overflow: auto; }
+.markdown a { color: inherit; text-decoration: underline; }
+.hljs-keyword, .hljs-selector-tag { color: #ff9dc5; }
+.hljs-string, .hljs-attr { color: #a5e79d; }
+.hljs-number, .hljs-literal, .hljs-title { color: #a9c6ff; }
+.hljs-comment { color: #a6afc3; }
+.model-picker { display: flex; align-items: center; gap: .5rem; font-size: .85rem; margin-bottom: .35rem; }
+.model-picker select { max-width: 80%; }

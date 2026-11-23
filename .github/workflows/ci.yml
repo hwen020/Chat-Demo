@@ -4,7 +4,6 @@ permissions:
   contents: read
 jobs:
   test:
-    # Playwright 1.52 supports Ubuntu 24.04.
     runs-on: ubuntu-24.04
     services:
       postgres:
@@ -19,6 +18,7 @@ jobs:
           --health-cmd "pg_isready -U chatflow -d chatflow"
           --health-interval 5s --health-timeout 3s --health-retries 10
     env:
+      PYTHONPATH: ${{ github.workspace }}/packages/shared/python
       DATABASE_URL: postgresql+psycopg://chatflow:chatflow@127.0.0.1:55432/chatflow
       COOKIE_SECURE: "0"
       APP_ORIGINS: http://127.0.0.1:8000

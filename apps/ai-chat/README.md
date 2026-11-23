@@ -1,37 +1,44 @@
-# ChatFlow
+# ChatFlow AI
 
-ChatFlow is an original, local-first conversation workspace. A deterministic Mock model streams replies while PostgreSQL stores accounts, conversations, messages, and replayable events. ChatFlow makes no external model requests in this release.
+A conversation workspace with a React and TypeScript frontend, FastAPI and a PostgreSQL-backed generation worker. It streams replies over replayable SSE and persists each conversation between visits.
 
-## Run locally
+## Quick start
 
-Prerequisites are Docker Engine and the Docker Compose plugin. From this project directory:
+From the repository root, run `docker compose up --build api` and open [AI Chat](http://127.0.0.1:8080). Register a sample account. Create a conversation, send a prompt, stop a reply, or edit a prior prompt and regenerate from that point. Deleted conversations are recoverable from **Recently deleted**.
+
+The application displays **Mock active** when no API key is configured. Mock answers are deterministic and individually labeled, including older answers viewed after real mode is enabled.
+
+## Enable OpenAI
+
+Use the values in [.env.example](.env.example) through the server environment, the root `.env`, or `docker compose --env-file apps/ai-chat/.env up --build api`. An OpenAI API key and a nonempty `AI_OPENAI_MODELS` JSON mapping are both required for real mode. Each JSON key is an OpenAI text model ID. Each value is a pair of positive integers for input and output prices in **micro-USD per million tokens**. For example, a price of $0.50 per million tokens is entered as `500000`. Use the configured model's current official prices. [OpenAI API pricing](https://platform.openai.com/docs/pricing)
+
+`OPENAI_API_KEY` is read by the API container only. The model selector displays only configured models. Real mode sends the bounded context to OpenAI and persists the model ID plus reported token usage when available. Failed OpenAI requests surface an error with retry. [OpenAI Chat Completions reference](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)
+
+| Variable | Default | Enforcement |
+| --- | --- | --- |
+| `AI_MAX_INPUT_TOKENS` | `8192` | Conservative UTF-8 byte count plus message overhead. The oldest context is dropped first and the latest prompt must fit. |
+| `AI_MAX_OUTPUT_TOKENS` | `1024` | Sent as the provider's maximum completion tokens, including any reasoning tokens. |
+| `AI_USER_DAILY_MICROUSD` | `250000` | Per-account daily admission budget, equivalent to $0.25. |
+| `AI_GLOBAL_DAILY_MICROUSD` | `2000000` | Deployment-wide daily admission budget, equivalent to $2.00. |
+
+Budget admission reserves the estimated input cost plus the maximum output cost before queuing each real request. PostgreSQL serializes admission across processes and counts reservations until midnight UTC, including cancelled and failed requests. The calculation uses configured prices and local token estimates. Configure appropriate limits in the provider account as well. Mock messages cost zero and use the existing per-minute send limits.
+
+## Native development and tests
+
+Use Python 3.12, Node.js 22 and a dedicated PostgreSQL 17 database. In `apps/ai-chat/web`, run `npm ci` and `npm run build`. Set `DATABASE_URL` to the SQLAlchemy PostgreSQL URL, `PYTHONPATH` to the absolute path to `packages/shared/python`, and `STATIC_DIR` to the absolute path to `apps/ai-chat/web/dist`. Use `APP_ORIGINS=http://127.0.0.1:8000` and `COOKIE_SECURE=0` for local HTTP.
+
+From `apps/ai-chat/api`:
 
 ```sh
-docker compose up --build
+python -m pip install -r requirements-test.txt
+alembic upgrade head
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
 ```
 
-Open http://127.0.0.1:8080. Register with a test email, create a conversation and send a message. Open a second browser profile to try another account. API docs are at http://127.0.0.1:8080/docs.
+For HMR, run `npm run dev` from `web/` and allow that exact origin. For API integration tests, use an isolated Mock deployment and set `CHATFLOW_TEST_BASE` and `CHATFLOW_TEST_ORIGIN` to its API address. Run `python -m pytest -q` in `api/`. The replay expiry test deliberately updates a record. For browser tests, set `CHATFLOW_WEB` to the frontend URL and run `npx playwright install chromium` and `npm test` in `web/`.
 
-Search conversation titles in the sidebar or mobile drawer. The filter is case-insensitive and covers the latest 100 conversations returned by the history API.
+## Deploy and migrate
 
-Compose binds the app to loopback and keeps PostgreSQL on the Compose network. It creates a named volume and applies Alembic on startup. Use `docker compose down` to stop it while retaining local data. The database password in the Compose example is for local development. The example file lists the optional override.
+Build from the repository root with `docker build -f apps/ai-chat/Dockerfile -t chatflow-ai .`. Use HTTPS, an exact HTTPS `APP_ORIGINS`, secure cookies, and deployment-managed secrets. Run `alembic upgrade head` against the AI database before starting the container. Allow streaming without proxy buffering, with an idle timeout above the 10-second heartbeat. Health probes use `/healthz` and `/readyz`. Compose continues to use the existing `chatflow_database` volume. See [migration and architecture notes](../../docs/ai-chat/workspace.md).
 
-### Run against a local PostgreSQL instance
-
-Create a dedicated database and set `DATABASE_URL` to its SQLAlchemy URL. Install `api/requirements-test.txt`. In `web/` run `npm ci` and `npm run build`. Set `STATIC_DIR` to the absolute path to `web/dist`. For loopback HTTP only, set `COOKIE_SECURE=0`. Set `APP_ORIGINS` to exactly the URL used in the browser, for example `http://127.0.0.1:8000`.
-
-From `api/`, run `alembic upgrade head` then `uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log`. To use development HMR, run `npm run dev` from `web/` and include that origin in `APP_ORIGINS`.
-
-## Verify
-
-With a dedicated running server/database, set `CHATFLOW_TEST_ORIGIN` to an allowed origin and `CHATFLOW_TEST_BASE` to the API base URL. From `api/`, run `python -m pytest -q`. One test explicitly expires replay in the test database. From `web/`, install Chromium with `npx playwright install chromium`, set `CHATFLOW_WEB` to the frontend URL and run `npm test`. Tests exercise desktop and 390px and 320px viewports. GitHub Actions builds the app, applies migrations, and runs both suites on PostgreSQL.
-
-CI uses Ubuntu 24.04 for the locked Playwright version. Dependency installation, the frontend build, and Chromium setup are reported as separate steps.
-
-See [final technical specification](docs/final-spec.md), [architecture](docs/architecture.md), [API](docs/api.md) and [local test report](docs/test-report.md).
-
-## Deployment configuration
-
-Use HTTPS, secure cookies (default), an explicit HTTPS origin, a separate Postgres database and deployment-managed secrets. Run `alembic upgrade head` ahead of starting the service. Health probes use `/healthz` and `/readyz`. Keep reverse-proxy SSE buffering disabled and set its idle timeout above the 10-second heartbeat. Keep the initial instance size and rate limits suited to a personal demo. The app stores conversation text and account emails in PostgreSQL. Supply only sample content on a public demo and define a database retention procedure before enabling public registrations.
-
-The worker uses the Mock provider. A real model can later implement the provider protocol with server-managed credentials and hard time and usage limits. This repository contains original UI and code and uses no files from the older SideProject applications.
+This branch requires a Docker build context at the repository root. The existing Render service and Demo should continue to run their current deployment until a deliberate rollout is scheduled.

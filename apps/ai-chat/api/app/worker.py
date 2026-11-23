@@ -1,10 +1,15 @@
+import asyncio
+from contextlib import suppress
 import json
 import logging
 import threading
 import time
 
 from app.db import engine, query, row, rows
-from app.providers import MockProvider
+import httpx
+
+from app.model_config import API_KEY, MODELS
+from app.providers import MockProvider, OpenAIProvider, Usage
 
 log = logging.getLogger("chatflow.worker")
 REPLAY_MINUTES = 15
@@ -36,43 +41,85 @@ def claim():
             query(conn, "UPDATE generations SET state='running' WHERE id=:id", id=job["id"])
         return job
 
-def generate(job, stop, provider):
+def still_running(conn, job):
+    current = row(conn, "SELECT state,deadline<=now() AS expired FROM generations "
+                        "WHERE id=:id FOR UPDATE", id=job["id"])
+    if not current or current["state"] != "running":
+        return False
+    if current["expired"]:
+        finish(conn, job, "failed", "generation_timeout")
+        return False
+    return True
+
+
+async def receive(job, stop, provider, history):
     run = job["id"]
+    seq = 2
+    events = provider.events(history, job["model"], job["output_limit"])
+    task = None
     try:
-        with engine.connect() as conn:
-            history = [
-                dict(message) for message in reversed(rows(conn, """
-                    SELECT role,content FROM messages
-                    WHERE conversation_id=:id AND state='complete'
-                    ORDER BY seq DESC LIMIT 20""", id=job["conversation_id"]))
-            ]
-        for seq, delta in enumerate(provider.stream(history), start=2):
-            if stop.wait(0.11):
+        while not stop.is_set():
+            task = asyncio.create_task(anext(events))
+            while not task.done() and not stop.is_set():
+                await asyncio.wait({task}, timeout=0.25)
+                if not task.done():
+                    with engine.begin() as conn:
+                        if not still_running(conn, job):
+                            return
+            if stop.is_set():
+                return
+            try:
+                delta = task.result()
+            except StopAsyncIteration:
+                with engine.begin() as conn:
+                    if still_running(conn, job):
+                        finish(conn, job, "complete")
                 return
             with engine.begin() as conn:
-                current = row(conn, "SELECT state,deadline<=now() AS expired FROM generations "
-                                    "WHERE id=:id FOR UPDATE", id=run)
-                if not current or current["state"] != "running":
+                if not still_running(conn, job):
                     return
-                if current["expired"]:
-                    finish(conn, job, "failed", "generation_timeout")
-                    return
-                query(conn, "UPDATE messages SET content=content || :delta WHERE id=:id",
-                      id=job["assistant_message_id"], delta=delta)
-                event(conn, run, seq, "delta", {"text": delta})
+                if isinstance(delta, Usage):
+                    query(conn, "UPDATE generations SET input_tokens=:input,output_tokens=:output WHERE id=:id",
+                          id=run, input=delta.input_tokens, output=delta.output_tokens)
+                else:
+                    query(conn, "UPDATE messages SET content=content || :delta WHERE id=:id",
+                          id=job["assistant_message_id"], delta=delta)
+                    event(conn, run, seq, "delta", {"text": delta})
+                    seq += 1
+    finally:
+        if task and not task.done():
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+        await events.aclose()
+
+
+def generate(job, stop):
+    run = job["id"]
+    try:
+        if job["model"] == "mock":
+            provider = MockProvider()
+        elif API_KEY and job["model"] in MODELS:
+            provider = OpenAIProvider(API_KEY)
+        else:
+            raise ValueError("model_unavailable")
+        with engine.connect() as conn:
+            history = [dict(message) for message in rows(conn, """
+                SELECT role,content FROM messages
+                WHERE conversation_id=:id AND NOT superseded AND state='complete'
+                  AND seq>=:start AND seq<=(SELECT seq FROM messages WHERE id=:prompt)
+                ORDER BY seq""", id=job["conversation_id"], start=job["context_start"],
+                prompt=job["user_message_id"])]
+        asyncio.run(receive(job, stop, provider, history))
+    except Exception as exc:
+        log.warning("generation failed run=%s error_type=%s", run, type(exc).__name__)
+        code = "generation_timeout" if isinstance(exc, httpx.TimeoutException) else "generation_failed"
         with engine.begin() as conn:
-            current = row(conn, "SELECT state FROM generations WHERE id=:id FOR UPDATE", id=run)
-            if current and current["state"] == "running":
-                finish(conn, job, "complete")
-    except Exception:
-        log.error("generation failed run=%s", run)
-        with engine.begin() as conn:
-            current = row(conn, "SELECT state FROM generations WHERE id=:id FOR UPDATE", id=run)
-            if current and current["state"] == "running":
-                finish(conn, job, "failed", "generation_failed")
+            if still_running(conn, job):
+                finish(conn, job, "failed", code)
+
 
 def work(stop):
-    provider = MockProvider()
     last_cleanup = 0.0
     while not stop.is_set():
         try:
@@ -89,7 +136,7 @@ def work(stop):
                 last_cleanup = time.monotonic()
             job = claim()
             if job:
-                generate(job, stop, provider)
+                generate(job, stop)
             else:
                 stop.wait(0.15)
         except Exception:

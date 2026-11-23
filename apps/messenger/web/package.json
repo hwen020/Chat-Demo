@@ -1,6 +1,6 @@
 {
   "private": true,
-  "name": "chatflow-web",
+  "name": "chatflow-messenger",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,11 +12,11 @@
     "react-dom": "18.3.1"
   },
   "devDependencies": {
-    "vite": "6.3.5",
-    "typescript": "5.8.3",
+    "@playwright/test": "1.55.1",
+    "@types/node": "22.15.30",
     "@types/react": "18.3.23",
     "@types/react-dom": "18.3.7",
-    "@playwright/test": "1.52.0",
-    "@types/node": "22.15.30"
+    "typescript": "5.8.3",
+    "vite": "6.4.6"
   }
 }

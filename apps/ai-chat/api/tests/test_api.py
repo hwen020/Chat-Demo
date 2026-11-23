@@ -5,8 +5,10 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from fastapi import HTTPException
 
 from app.db import engine, query
+from app import model_config
 
 BASE = os.getenv("CHATFLOW_TEST_BASE", "http://127.0.0.1:8000")
 ORIGIN = os.getenv("CHATFLOW_TEST_ORIGIN", "http://127.0.0.1:5173")
@@ -141,3 +143,62 @@ def test_running_generation_deadline(accounts):
             query(connection, "UPDATE generations SET deadline=now()-interval '1 second' WHERE id=:id", id=run)
         assert list(iterator)[-1][1:] == ("error", {"state": "failed", "code": "generation_timeout"})
     assert a.get(resource).json()["error_code"] == "generation_timeout"
+
+
+def test_context_edit_retry_delete_and_restore(accounts, monkeypatch):
+    a, b = accounts
+    path = create(a)
+    assert a.get("/v1/models").json()["mode"] == "mock"
+    assert a.post(path + "/messages", json={
+        "content": "unknown model", "model": "unconfigured", "request_key": str(uuid4()),
+    }).status_code == 422
+
+    def complete(response):
+        assert response.status_code == 202, response.text
+        with a.stream("GET", path + "/generations/" + response.json()["id"] + "/events") as stream:
+            events = list(frames(stream))
+        assert events[-1][1] == "done"
+        return "".join(payload["text"] for _, kind, payload in events if kind == "delta")
+
+    assert "turn 1" in complete(start(a, path))
+    assert "turn 2" in complete(start(a, path))
+    original = a.get(path + "/messages").json()["messages"]
+    edit_path = path + "/regenerate/" + original[-2]["id"]
+    replacement = {"content": "Edited second prompt", "request_key": str(uuid4()), "model": "mock"}
+    assert b.post(edit_path, json=replacement).status_code == 404
+    assert "turn 2" in complete(a.post(edit_path, json=replacement))
+    assert a.post(edit_path, json=replacement).status_code == 202
+    updated = a.get(path + "/messages").json()["messages"]
+    assert len(updated) == 4
+    assert updated[:2] == original[:2]
+    assert updated[-2]["content"] == replacement["content"]
+    assert updated[-1]["model"] == "mock"
+
+    assert a.delete(path).status_code == 204
+    assert a.get(path + "/messages").status_code == 404
+    assert b.get("/v1/conversations?deleted=true").json() == []
+    assert b.post(path + "/restore", json={}).status_code == 404
+    assert a.get("/v1/conversations?deleted=true&q=ISOLATION").json()[0]["id"] == path.split("/")[-1]
+    assert a.post(path + "/restore", json={}).status_code == 200
+    assert a.get(path + "/messages").json()["messages"] == updated
+
+
+    model = model_config.Model("test-price", 1_000_000, 1_000_000)
+    monkeypatch.setattr(model_config, "OUTPUT_LIMIT", 64)
+    monkeypatch.setattr(model_config, "USER_BUDGET", 100)
+    monkeypatch.setattr(model_config, "GLOBAL_BUDGET", 200)
+    with engine.connect() as connection:
+        alice = a.get("/v1/me").json()["id"]
+        bob = b.get("/v1/me").json()["id"]
+        cost = model_config.reserve(connection, alice, model, 16)
+        assert cost == 80
+        query(connection, "UPDATE generations SET reserved_cost_microusd=:cost WHERE id=:id",
+              cost=cost, id=updated[-1]["generation_id"])
+        with pytest.raises(HTTPException) as own:
+            model_config.reserve(connection, alice, model, 16)
+        assert own.value.status_code == 429
+        assert model_config.reserve(connection, bob, model, 16) == 80
+        monkeypatch.setattr(model_config, "GLOBAL_BUDGET", 150)
+        with pytest.raises(HTTPException) as deployment:
+            model_config.reserve(connection, bob, model, 16)
+        assert deployment.value.detail == "daily_cost_limit"
