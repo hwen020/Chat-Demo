@@ -19,6 +19,8 @@ class Signals:
     def __init__(self):
         self.listeners: dict[str, set[asyncio.Event]] = defaultdict(set)
         self.subscribed = False
+        self.public_connections = 0
+        self.per_account = {}
         self.notifications = 0
         self.publish_errors = 0
         self.queue_dropped = 0

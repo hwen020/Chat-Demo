@@ -1,5 +1,9 @@
 # ChatFlow
 
+## Public demo
+
+Each product has a separate prepared Render Free deployment. Public URLs are pending account access. A first visit can take about one minute while a Free instance wakes. See [deployment and public acceptance](docs/public-demo.md).
+
 Two independent full-stack applications in one repository. Each ships its own React and TypeScript UI, FastAPI API, PostgreSQL migrations, Docker image and GitHub Actions workflow.
 
 | Application | What it does | Local demo | Guide |

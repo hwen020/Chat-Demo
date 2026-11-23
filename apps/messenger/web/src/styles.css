@@ -52,3 +52,5 @@ article p { white-space: pre-wrap; }
 
 .message-search { display: flex; flex-wrap: wrap; gap: 8px; }
 .message-search input { flex: 1; min-width: 0; }
+
+.demo-notice { padding: .4rem .8rem; background: #fff2c4; color: #312306; text-align: center; font-size: .875rem; }

@@ -16,7 +16,9 @@ def limit(name, default, minimum, maximum):
     return value
 
 
-API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
+from chatflow_shared.auth import PUBLIC_DEMO
+
+API_KEY = "" if PUBLIC_DEMO else os.getenv("OPENAI_API_KEY", "").strip()
 INPUT_LIMIT = limit("AI_MAX_INPUT_TOKENS", 8192, 512, 32768)
 OUTPUT_LIMIT = limit("AI_MAX_OUTPUT_TOKENS", 1024, 64, 8192)
 USER_BUDGET = limit("AI_USER_DAILY_MICROUSD", 250_000, 1, 10**12)

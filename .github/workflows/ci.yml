@@ -60,6 +60,14 @@ jobs:
         working-directory: apps/ai-chat/web
       - run: docker exec -i ${{ job.services.postgres.id }} sh -s -- ai-chat < services/verify-backup.sh
       - run: docker compose config --quiet && docker compose build api
+      - name: Check public demo controls
+        env:
+          PUBLIC_DEMO: "1"
+          COOKIE_SECURE: "1"
+          APP_ORIGINS: https://demo.example.test
+          OPENAI_API_KEY: synthetic-fixture
+        run: python -c "import runpy; runpy.run_path('../../../services/check-public-demo.py', run_name='__main__')"
+        working-directory: apps/ai-chat/api
       - uses: actions/upload-artifact@v4
         if: always()
         with:

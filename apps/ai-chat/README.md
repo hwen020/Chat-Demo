@@ -1,5 +1,9 @@
 # ChatFlow AI
 
+## Public demo
+
+AI Chat has a separate prepared Render Free deployment. Public URLs are pending account access. A first visit can take about one minute while a Free instance wakes. See [deployment and public acceptance](../../docs/public-demo.md).
+
 A conversation workspace with a React and TypeScript frontend, FastAPI and a PostgreSQL-backed generation worker. It streams replies over replayable SSE and persists each conversation between visits.
 
 ## Quick start

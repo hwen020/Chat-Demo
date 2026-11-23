@@ -65,3 +65,10 @@ Paths below are relative to the repository root. Tests use synthetic accounts an
 ## Maintenance boundaries
 
 Keep the product workflows and databases independent. Re-run the fault harness and backup rehearsal after changes in delivery or persistence. Address Python advisories with focused version upgrades and regression tests. A real provider smoke test, billing reconciliation, sustained load, and bit-identical images remain separate follow-up work.
+
+## Public demos
+
+| Capability | Status | Evidence |
+| --- | --- | --- |
+| Two independently hosted products | Partial | [Blueprint](../render.yaml) and [cloud deployment guide](public-demo.md). Cloud account inventory and actual public URL acceptance await provider authorization. |
+| Separate Render Static Sites | Missing | The prepared Render candidates serve the existing frontend and API on the same origin. Static-site cross-origin sessions and streams remain unverified. |

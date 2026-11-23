@@ -15,7 +15,7 @@ from app.db import engine, query, row, rows
 from app.model_config import MODELS, INPUT_LIMIT, OUTPUT_LIMIT, context_window, reserve
 from app.schemas import MessageInput, Title
 from app.worker import event, finish, work
-from chatflow_shared.auth import consume, digest, install_auth
+from chatflow_shared.auth import DEMO_DOCS, consume, digest, install_auth
 
 
 @asynccontextmanager
@@ -29,7 +29,7 @@ async def lifespan(app):
         stop.set()
         worker.join(timeout=4)
 
-app = FastAPI(title="ChatFlow AI", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="ChatFlow AI", version="1.0.0", lifespan=lifespan, **DEMO_DOCS)
 
 user, _ = install_auth(app, engine, "chatflow_session")
 

@@ -55,6 +55,14 @@ jobs:
         run: |
           docker compose -p chatflow-messenger-ci -f docker-compose.yml -f services/messenger/test.compose.yml logs --no-color > messenger.log
           docker compose -p chatflow-messenger-ci -f docker-compose.yml -f services/messenger/test.compose.yml down -v
+      - name: Check public demo controls
+        env:
+          PUBLIC_DEMO: "1"
+          COOKIE_SECURE: "1"
+          APP_ORIGINS: https://demo.example.test
+          OPENAI_API_KEY: synthetic-fixture
+        run: python -c "import runpy; runpy.run_path('../../../services/check-public-demo.py', run_name='__main__')"
+        working-directory: apps/messenger/api
       - uses: actions/upload-artifact@v4
         if: always()
         with:

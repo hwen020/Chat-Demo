@@ -317,4 +317,12 @@ function App() {
   return account ? <Workspace account={account} onLogout={() => setAccount(null)} /> : <SignIn onAccount={setAccount} />
 }
 
-createRoot(document.getElementById('root')!).render(<App />)
+function DemoNotice() {
+  const [enabled, setEnabled] = useState(false)
+  useEffect(() => {
+    api<{ enabled: boolean }>('/demo').then(result => setEnabled(result.enabled)).catch(() => undefined)
+  }, [])
+  return enabled ? <div className="demo-notice">Demo / Synthetic Data. Register with a unique @example.test address and use sample messages only.</div> : null
+}
+
+createRoot(document.getElementById('root')!).render(<><DemoNotice /><App /></>)

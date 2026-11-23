@@ -14,10 +14,10 @@ from starlette.concurrency import run_in_threadpool
 
 from app.db import engine, query, row, rows
 from app.realtime import INSTANCE, REPLAY_INTERVAL, Signals, lifespan
-from chatflow_shared.auth import consume, install_auth
+from chatflow_shared.auth import DEMO_DOCS, PUBLIC_DEMO, consume, install_auth
 from chatflow_shared.schemas import Input, trim
 
-app = FastAPI(title="ChatFlow Messenger", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="ChatFlow Messenger", version="1.0.0", lifespan=lifespan, **DEMO_DOCS)
 app.state.signals = Signals()
 user, origins = install_auth(app, engine, "messenger_session")
 
@@ -43,6 +43,8 @@ def health():
 def ready():
     with engine.connect() as conn:
         query(conn, "SELECT 1 FROM chats LIMIT 1")
+    if PUBLIC_DEMO:
+        return {"status": "ready"}
     signals = app.state.signals
     return {"status": "ready", "instance": INSTANCE, "redis_subscribed": signals.subscribed,
             "redis_notifications": signals.notifications}
@@ -50,6 +52,8 @@ def ready():
 
 @app.get("/metrics", include_in_schema=False)
 async def metrics():
+    if PUBLIC_DEMO:
+        raise HTTPException(404, "not_found")
     signals = app.state.signals
     values = {
         "messenger_websocket_active": sum(len(room) for room in signals.listeners.values()),
@@ -194,9 +198,20 @@ async def live(socket: WebSocket, chat: UUID, after: int = 0):
     if socket.headers.get("origin") not in origins or not 0 <= after <= 2**63-1:
         await socket.close(code=1008)
         return
-    incoming = wakeup = None
+    incoming = wakeup = account_id = None
+    limited = False
     try:
-        with socket.app.state.signals.room(chat) as signal:
+        signals = socket.app.state.signals
+        if PUBLIC_DEMO:
+            account = await run_in_threadpool(user, socket)
+            account_id = account["id"]
+            if signals.public_connections >= 32 or signals.per_account.get(account_id, 0) >= 3:
+                await socket.close(code=1008)
+                return
+            signals.public_connections += 1
+            signals.per_account[account_id] = signals.per_account.get(account_id, 0) + 1
+            limited = True
+        with signals.room(chat) as signal:
             batch = await run_in_threadpool(live_messages, socket, chat, after)
             await socket.accept(headers=[(b"x-messenger-instance", INSTANCE.encode())])
             incoming = asyncio.create_task(socket.receive())
@@ -223,6 +238,11 @@ async def live(socket: WebSocket, chat: UUID, after: int = 0):
     except HTTPException:
         await socket.close(code=1008)
     finally:
+        if limited:
+            signals.public_connections -= 1
+            signals.per_account[account_id] -= 1
+            if not signals.per_account[account_id]:
+                del signals.per_account[account_id]
         for task in (incoming, wakeup):
             if task and not task.done():
                 task.cancel()

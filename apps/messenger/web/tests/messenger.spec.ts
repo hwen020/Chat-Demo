@@ -12,6 +12,11 @@ test('contacts can exchange messages live and open a group', async ({ browser },
   const email = (name: string) => name + '.' + tag + '@example.test'
   async function register(page: Page, name: string) {
     await page.goto('/')
+    if (process.env.CHATFLOW_EXPECT_PUBLIC_DEMO === '1') {
+      await expect(page.getByText(/Demo \/ Synthetic Data/)).toBeVisible()
+      expect((await page.request.get('/metrics')).status()).toBe(404)
+      expect((await page.request.get('/openapi.json')).status()).toBe(404)
+    }
     await page.getByRole('button', { name: 'Create an account' }).click()
     await page.getByLabel('Email').fill(email(name))
     await page.getByLabel('Password').fill('synthetic-only-password')

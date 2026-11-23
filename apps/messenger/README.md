@@ -1,5 +1,9 @@
 # ChatFlow Messenger
 
+## Public demo
+
+Messenger has a separate prepared Render Free deployment. Public URLs are pending account access. A first visit can take about one minute while a Free instance wakes. See [deployment and public acceptance](../../docs/public-demo.md).
+
 A real-time messaging application for direct and group conversations. React and TypeScript provide a contact and conversation workspace. FastAPI serves REST and authenticated WebSocket connections. PostgreSQL stores accounts, memberships, messages and sessions. Nginx balances two API instances and upgrades WebSockets. Redis Pub/Sub wakes the other instance after a message commits.
 
 ## Quick start

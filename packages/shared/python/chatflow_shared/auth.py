@@ -20,6 +20,8 @@ log = logging.getLogger("uvicorn.error.chatflow")
 passwords = PasswordHasher()
 dummy_hash = passwords.hash(secrets.token_urlsafe(32))
 MAX_BODY = 32768
+PUBLIC_DEMO = os.getenv("PUBLIC_DEMO") == "1"
+DEMO_DOCS = dict(docs_url=None, redoc_url=None, openapi_url=None) if PUBLIC_DEMO else {}
 
 def query(conn, sql, **params):
     return conn.execute(text(sql), params)
@@ -44,9 +46,15 @@ def consume(conn, bucket, maximum):
 
 def install_auth(app, engine, cookie):
     COOKIE = cookie
-    SECURE_COOKIE = os.getenv("COOKIE_SECURE", "1") == "1"
+    hosted_demo = PUBLIC_DEMO and os.getenv("RENDER") == "true"
+    SECURE_COOKIE = hosted_demo or os.getenv("COOKIE_SECURE", "1") == "1"
     ORIGINS = frozenset(filter(None, (origin.strip() for origin in os.getenv(
-        "APP_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(","))))
+        "APP_ORIGINS", "" if hosted_demo else "http://localhost:5173,http://127.0.0.1:5173").split(","))))
+
+    if PUBLIC_DEMO:
+        external = os.getenv("RENDER_EXTERNAL_URL", "").rstrip("/")
+        if external.startswith("https://"):
+            ORIGINS = ORIGINS | {external}
 
     def error(status, code, headers=None):
         return JSONResponse({"error": {"code": code}}, status_code=status, headers=headers)
@@ -119,9 +127,18 @@ def install_auth(app, engine, cookie):
                     return dict(account)
         raise HTTPException(401, "authentication_required")
 
+    @app.get("/v1/demo")
+    def demo_mode():
+        return {"enabled": PUBLIC_DEMO}
+
     @app.post("/v1/auth/register", status_code=201)
     def register(body: Credentials, request: Request, response: Response):
         auth_limit(request, body.email)
+        if PUBLIC_DEMO and not body.email.endswith("@example.test"):
+            raise HTTPException(422, "synthetic_email_required")
+        if PUBLIC_DEMO:
+            with engine.begin() as conn:
+                consume(conn, "demo:register:global", 30)
         identity = uuid4()
         password_hash = passwords.hash(body.password)
         with engine.begin() as conn:
