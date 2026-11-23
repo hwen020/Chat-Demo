@@ -26,6 +26,10 @@ For the integration suite, use a fresh test database, set `COOKIE_SECURE=0` and 
 
 For the two-browser-session workflow, start an isolated Messenger instance, set `MESSENGER_WEB` to its URL, and run `npx playwright install chromium` and `npm test` from `web/`. The browser test registers synthetic accounts and checks direct and group delivery.
 
+## Version and test evidence
+
+The API pins FastAPI 0.133.0 and Starlette 1.3.1 in [requirements.txt](api/requirements.txt). The shared security workflow scans npm and Python dependencies plus reachable Git history. Messenger's browser suite runs the delayed and duplicated WebSocket frame regression and message search on desktop and at 390px. See the [coverage matrix](../../docs/coverage-audit.md).
+
 ## Distributed acceptance
 
 From the repository root, use a dedicated temporary project and free loopback ports. Install the API test requirements with Python 3.12, and run:

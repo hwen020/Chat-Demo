@@ -23,6 +23,12 @@ Use the values in [.env.example](.env.example) through the server environment, t
 
 Budget admission reserves the estimated input cost plus the maximum output cost before queuing each real request. PostgreSQL serializes admission across processes and counts reservations until midnight UTC, including cancelled and failed requests. The calculation uses configured prices and local token estimates. Configure appropriate limits in the provider account as well. Mock messages cost zero and use the existing per-minute send limits.
 
+## Version and test evidence
+
+The API pins FastAPI 0.133.0 and Starlette 1.3.1 in [requirements.txt](api/requirements.txt). CI runs browser and REST/SSE integration tests against labeled Mock mode. The OpenAI adapter also has controlled HTTP transport tests for incremental deltas, usage, timeouts, rate limits and cancellation. A live OpenAI smoke test needs an operator-configured server key and model. Results for each evidence type are recorded in the [acceptance report](../../docs/ai-chat/acceptance.md).
+
+To reproduce local Mock SSE timings, run `python -m pytest -s -k context_edit_retry_delete_and_restore` against the disposable test deployment. It measures three client submissions through first delta and completion.
+
 ## Native development and tests
 
 Use Python 3.12, Node.js 22 and a dedicated PostgreSQL 17 database. In `apps/ai-chat/web`, run `npm ci` and `npm run build`. Set `DATABASE_URL` to the SQLAlchemy PostgreSQL URL, `PYTHONPATH` to the absolute path to `packages/shared/python`, and `STATIC_DIR` to the absolute path to `apps/ai-chat/web/dist`. Use `APP_ORIGINS=http://127.0.0.1:8000` and `COOKIE_SECURE=0` for local HTTP.

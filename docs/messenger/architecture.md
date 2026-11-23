@@ -12,6 +12,8 @@ flowchart LR
     B <-->|"Commit / cursor replay"| P
     A <-->|"Post-commit signals"| R[("Redis Pub/Sub")]
     B <-->|"Post-commit signals"| R
+    O["Private scraper"] -->|"/metrics"| A
+    O -->|"/metrics"| B
 ```
 
 ## Ordering, durability and failure recovery
@@ -21,6 +23,8 @@ A sender can use the authenticated WebSocket or REST. The browser prefers WebSoc
 Each API process has one Redis subscription. After commit, the writer signals its local sockets and queues a Redis notification with only the conversation UUID. A bounded background queue and a timeout keep Redis DNS and network delays off the acknowledgment path. The subscribing process re-reads committed rows from PostgreSQL. It can recover when a notification gets dropped, arrives twice, or reaches the node after a later notification.
 
 Each connected socket checks PostgreSQL on a two-second interval as a fallback. Reconnecting clients ask for committed messages strictly after their cursor. The browser deduplicates by sequence and inserts by sequence, including optimistic acknowledgments and delayed frames. Session and membership checks run when opening the socket, reading a batch or sending a message.
+
+Message search applies a literal case-insensitive filter before PostgreSQL sequence pagination, leaving the open WebSocket timeline in place. The proxy omits query strings from access logs and blocks the private metrics endpoint.
 
 Nginx forwards upgrade requests and balances two independently addressable API instances. Each instance reads the same Messenger database. Compose runs the Messenger migration once. The default proxy port is 8081. Direct instance ports only exist in the test override. The runtime posture and measured results are documented in the [Messenger acceptance report](acceptance.md).
 
