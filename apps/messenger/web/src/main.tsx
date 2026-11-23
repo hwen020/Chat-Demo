@@ -84,7 +84,8 @@ function Workspace({ account, onLogout }: { account: Account; onLogout: () => vo
         if (controller.signal.aborted) return
         const message = JSON.parse(event.data) as Message
         cursor = Math.max(cursor, message.seq)
-        setMessages(items => items.some(item => item.seq === message.seq) ? items : [...items, message])
+        setMessages(items => items.some(item => item.seq === message.seq) ? items
+          : [...items, message].sort((a, b) => a.seq - b.seq))
       }
       socket.onclose = () => {
         if (controller.signal.aborted) return

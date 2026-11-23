@@ -19,6 +19,25 @@ test('contacts can exchange messages live and open a group', async ({ browser },
   }
   try {
     await Promise.all([register(alice, 'alex'), register(bob, 'sam'), register(carol, 'avery')])
+    const peerMessage = 'I will send the agenda.'
+    const ownMessage = 'I will read it before the meeting.'
+    await alice.addInitScript((text) => {
+      const NativeSocket = window.WebSocket
+      window.WebSocket = class extends NativeSocket {
+        constructor(url: string | URL, protocols?: string | string[]) {
+          super(url, protocols)
+          this.addEventListener('message', event => {
+            if (document.documentElement.dataset.delayed || JSON.parse(event.data).content !== text) return
+            event.stopImmediatePropagation()
+            document.documentElement.dataset.delayed = 'true'
+            window.addEventListener('deliver-delayed-chat', () => {
+              for (let i = 0; i < 2; i++) this.dispatchEvent(new MessageEvent('message', { data: event.data }))
+            }, { once: true })
+          })
+        }
+      }
+    }, peerMessage)
+    await alice.reload()
     await alice.getByRole('button', { name: 'New chat' }).click()
     await alice.getByLabel('Contact emails').fill(email('sam'))
     await alice.getByRole('button', { name: 'Start chat' }).click()
@@ -28,6 +47,17 @@ test('contacts can exchange messages live and open a group', async ({ browser },
     await alice.getByRole('textbox', { name: 'Message', exact: true }).fill('Can we review the demo this afternoon?')
     await alice.getByRole('button', { name: 'Send' }).click()
     await expect(bob.getByText('Can we review the demo this afternoon?')).toBeVisible()
+    await expect(alice.getByRole('status')).toHaveText('Live')
+    await bob.getByRole('textbox', { name: 'Message', exact: true }).fill(peerMessage)
+    await bob.getByRole('button', { name: 'Send' }).click()
+    await expect(alice.locator('html')).toHaveAttribute('data-delayed', 'true')
+    await alice.getByRole('textbox', { name: 'Message', exact: true }).fill(ownMessage)
+    await alice.getByRole('button', { name: 'Send' }).click()
+    await expect(alice.getByText(ownMessage)).toBeVisible()
+    await alice.evaluate(() => window.dispatchEvent(new Event('deliver-delayed-chat')))
+    await expect(alice.locator('.thread article p')).toHaveText([
+      'Can we review the demo this afternoon?', peerMessage, ownMessage,
+    ])
     await bob.reload()
     await bob.getByRole('navigation').getByRole('button', { name: new RegExp(email('alex')) }).click()
     await expect(bob.getByText('Can we review the demo this afternoon?')).toBeVisible()
