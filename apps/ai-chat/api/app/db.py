@@ -18,6 +18,7 @@ if PUBLIC_DEMO and os.getenv("RENDER") == "true" and url.query.get("sslmode") no
 engine = create_engine(
     url,
     pool_pre_ping=True,
+    hide_parameters=PUBLIC_DEMO,
     connect_args={"connect_timeout": 3},
     **({"pool_size": 3, "max_overflow": 2, "pool_timeout": 5} if PUBLIC_DEMO else {}),
 )
