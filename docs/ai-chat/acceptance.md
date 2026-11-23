@@ -7,7 +7,7 @@
 
 ## Security patch and coverage follow-up
 
-Commit `77eb75c` pins FastAPI 0.133.0 and Starlette 1.3.1. The patched suite passed 19 backend tests and 4 browser cases, with two redundant mobile copies of the desktop action test skipped. CI recorded 164.1 to 314.6 ms to the first delta across three Mock SSE samples and restored revision 0002 with a matching synthetic message checksum. The OpenAI adapter is tested with an HTTP fixture. The CI browser passes use Mock and live OpenAI remains unverified. [AI Chat CI](https://github.com/hwen020/Chat-Demo/actions/runs/45279814586) ? [Security audit](https://github.com/hwen020/Chat-Demo/actions/runs/45279814607)
+Commit `77eb75c` pins FastAPI 0.133.0 and Starlette 1.3.1. The patched suite passed 19 backend tests and 4 browser cases, with two redundant mobile copies of the desktop action test skipped. CI recorded 164.1 to 314.6 ms to the first delta across three Mock SSE samples and restored revision 0002 with a matching synthetic message checksum. The OpenAI adapter is tested with an HTTP fixture. The CI browser passes use Mock and live OpenAI remains unverified. [AI Chat CI](https://github.com/hwen020/Chat-Demo/actions/runs/45279814586) | [Security audit](https://github.com/hwen020/Chat-Demo/actions/runs/45279814607)
 
 ## Original local acceptance on 2026-11-23
 

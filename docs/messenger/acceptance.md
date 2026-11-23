@@ -7,7 +7,7 @@
 
 ## Security patch and coverage follow-up
 
-Commit `77eb75c` pins FastAPI 0.133.0 and Starlette 1.3.1 and adds message search and private Redis/WebSocket metrics. The patched suite passed 3 PostgreSQL integration tests and 2 browser viewport runs. The distributed workflow started two API instances behind Nginx, verified WebSocket sends in both directions, checked private metrics isolation, and exercised Redis outage and API restart. This CI run measured 140.6 ms p95 over the bounded workload and 1831.4 ms for the Redis outage delivery. The backup rehearsal restored Alembic revision 0001 and verified a checksum over synthetic message rows. [Messenger CI](https://github.com/hwen020/Chat-Demo/actions/runs/45279814554) ? [Security audit](https://github.com/hwen020/Chat-Demo/actions/runs/45279814607)
+Commit `77eb75c` pins FastAPI 0.133.0 and Starlette 1.3.1 and adds message search and private Redis/WebSocket metrics. The patched suite passed 3 PostgreSQL integration tests and 2 browser viewport runs. The distributed workflow started two API instances behind Nginx, verified WebSocket sends in both directions, checked private metrics isolation, and exercised Redis outage and API restart. This CI run measured 140.6 ms p95 over the bounded workload and 1831.4 ms for the Redis outage delivery. The backup rehearsal restored Alembic revision 0001 and verified a checksum over synthetic message rows. [Messenger CI](https://github.com/hwen020/Chat-Demo/actions/runs/45279814554) | [Security audit](https://github.com/hwen020/Chat-Demo/actions/runs/45279814607)
 
 ## Original distributed acceptance on 2026-11-23
 
