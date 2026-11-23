@@ -15,4 +15,4 @@ COPY packages/shared/python/chatflow_shared /app/chatflow_shared
 COPY --from=frontend /src/dist /app/web
 USER appuser
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log", "--ws-max-size", "32768"]

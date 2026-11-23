@@ -1,0 +1,7 @@
+services:
+  messenger-api-a:
+    ports:
+      - "127.0.0.1:${MESSENGER_TEST_PORT_A:-18091}:8000"
+  messenger-api-b:
+    ports:
+      - "127.0.0.1:${MESSENGER_TEST_PORT_B:-18092}:8000"

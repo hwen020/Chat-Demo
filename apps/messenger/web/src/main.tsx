@@ -8,6 +8,10 @@ type Account = { id: string; email: string }
 type Chat = { id: string; title: string; contacts: string[]; group_chat: boolean }
 type Message = { seq: number; sender_id: string; sender: string; content: string; created_at: string }
 type Page = { messages: Message[]; before: number | null }
+type OutgoingMessage = { content: string; request_key: string }
+type Receipt = { type: 'ack'; request_key: string; message: Message }
+  | { type: 'error'; request_key?: string; code: string }
+class SocketUnavailable extends Error {}
 const describe = (error: unknown) => error instanceof ApiError
   ? error.code.replaceAll('_', ' ') : 'Connection failed. Try again.'
 
@@ -51,7 +55,9 @@ function Workspace({ account, onLogout }: { account: Account; onLogout: () => vo
   const [connected, setConnected] = useState(false)
   const current = chats.find(chat => chat.id === selected)
   const view = useRef('')
-  const pending = useRef<{ chat: string; content: string; request_key: string } | null>(null)
+  const pending = useRef<(OutgoingMessage & { chat: string }) | null>(null)
+  const liveSocket = useRef<{ chat: string; socket: WebSocket }>()
+  const receipts = useRef(new Map<string, (notice: Receipt) => void>())
   const bottom = useRef<HTMLDivElement>(null)
 
   function refresh(filter: string, signal?: AbortSignal) {
@@ -79,10 +85,17 @@ function Workspace({ account, onLogout }: { account: Account; onLogout: () => vo
     function connect() {
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
       socket = new WebSocket(protocol + '//' + location.host + '/v1' + path + '/live?after=' + cursor)
+      liveSocket.current = { chat: selected, socket }
       socket.onopen = () => { reconnectDelay = 1000; setConnected(true) }
       socket.onmessage = event => {
         if (controller.signal.aborted) return
-        const message = JSON.parse(event.data) as Message
+        const frame = JSON.parse(event.data) as Message | Receipt
+        if ('type' in frame) {
+          if (frame.request_key) receipts.current.get(frame.request_key)?.(frame)
+          return
+        }
+        const message = frame
+        if (!Number.isSafeInteger(message.seq)) return
         cursor = Math.max(cursor, message.seq)
         setMessages(items => items.some(item => item.seq === message.seq) ? items
           : [...items, message].sort((a, b) => a.seq - b.seq))
@@ -101,7 +114,10 @@ function Workspace({ account, onLogout }: { account: Account; onLogout: () => vo
       cursor = page.messages.at(-1)?.seq ?? 0
       connect()
     }).catch(err => { if (!controller.signal.aborted) setError(describe(err)) })
-    return () => { controller.abort(); socket?.close(); window.clearTimeout(timer) }
+    return () => {
+      controller.abort(); socket?.close(); window.clearTimeout(timer)
+      if (liveSocket.current?.socket === socket) liveSocket.current = undefined
+    }
   }, [selected])
 
   useEffect(() => { bottom.current?.scrollIntoView({ block: 'end' }) }, [messages.at(-1)?.seq])
@@ -132,6 +148,27 @@ function Workspace({ account, onLogout }: { account: Account; onLogout: () => vo
     } catch (err) { setError(describe(err)) } finally { setBusy(false) }
   }
 
+  function sendLive(body: OutgoingMessage): Promise<Message> {
+    const socket = liveSocket.current?.chat === selected ? liveSocket.current.socket : undefined
+    if (socket?.readyState !== WebSocket.OPEN) return Promise.reject(new SocketUnavailable())
+    return new Promise((resolve, reject) => {
+      function clear() {
+        window.clearTimeout(timer)
+        receipts.current.delete(body.request_key)
+      }
+      const timer = window.setTimeout(() => { clear(); reject(new SocketUnavailable()) }, 1500)
+      receipts.current.set(body.request_key, frame => {
+        clear()
+        if (frame.type === 'ack') resolve(frame.message)
+        else reject(new ApiError(400, frame.code))
+      })
+      try { socket.send(JSON.stringify(body)) } catch {
+        clear()
+        reject(new SocketUnavailable())
+      }
+    })
+  }
+
   async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const content = draft.trim()
@@ -143,8 +180,11 @@ function Workspace({ account, onLogout }: { account: Account; onLogout: () => vo
     setBusy(true)
     setError('')
     try {
-      const message = await api<Message>('/chats/' + selected + '/messages', 'POST',
-        { content, request_key: request.request_key })
+      const body = { content, request_key: request.request_key }
+      const message = await sendLive(body).catch(err => {
+        if (!(err instanceof SocketUnavailable)) throw err
+        return api<Message>('/chats/' + selected + '/messages', 'POST', body)
+      })
       pending.current = null
       if (view.current === selected) {
         setDraft(value => value.trim() === content ? '' : value)

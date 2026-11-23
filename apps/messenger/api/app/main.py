@@ -1,5 +1,6 @@
 import asyncio
 import os
+from contextlib import suppress
 from pathlib import Path
 from typing import Annotated
 from uuid import UUID, uuid4
@@ -7,14 +8,16 @@ from uuid import UUID, uuid4
 from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
 from fastapi.staticfiles import StaticFiles
-from pydantic import Field, field_validator
+from pydantic import Field, ValidationError, field_validator
 from starlette.concurrency import run_in_threadpool
 
 from app.db import engine, query, row, rows
+from app.realtime import INSTANCE, REPLAY_INTERVAL, Signals, lifespan
 from chatflow_shared.auth import consume, install_auth
 from chatflow_shared.schemas import Input, trim
 
-app = FastAPI(title="ChatFlow Messenger", version="1.0.0")
+app = FastAPI(title="ChatFlow Messenger", version="1.0.0", lifespan=lifespan)
+app.state.signals = Signals()
 user, origins = install_auth(app, engine, "messenger_session")
 
 
@@ -39,7 +42,9 @@ def health():
 def ready():
     with engine.connect() as conn:
         query(conn, "SELECT 1 FROM chats LIMIT 1")
-    return {"status": "ready"}
+    signals = app.state.signals
+    return {"status": "ready", "instance": INSTANCE, "redis_subscribed": signals.subscribed,
+            "redis_notifications": signals.notifications}
 
 
 def member(conn, chat, account):
@@ -131,7 +136,8 @@ def send(chat: UUID, body: SendInput, account=Depends(user)):
                      VALUES (:chat,:user,:key,:content) RETURNING seq,sender_id,content,created_at""",
                      chat=chat, user=account["id"], key=body.request_key, content=body.content)
         query(conn, "UPDATE chats SET updated_at=now() WHERE id=:chat", chat=chat)
-        return {**result, "sender": account["email"]}
+    app.state.signals.notify(chat)
+    return {**result, "sender": account["email"]}
 
 
 def live_messages(socket, chat, cursor):
@@ -142,30 +148,71 @@ def live_messages(socket, chat, cursor):
             AND m.seq>:cursor ORDER BY m.seq LIMIT 100""", chat=chat, cursor=cursor)]
 
 
+def submit_socket_message(socket, chat, body):
+    return send(chat, body, user(socket))
+
+
+async def handle_socket_message(socket, chat, event):
+    text = event.get("text")
+    if text is None or len(text.encode()) > 32768:
+        await socket.send_json({"type": "error", "code": "invalid_input"})
+        return
+    try:
+        body = SendInput.model_validate_json(text)
+    except ValidationError:
+        await socket.send_json({"type": "error", "code": "invalid_input"})
+        return
+    try:
+        message = await run_in_threadpool(submit_socket_message, socket, chat, body)
+    except HTTPException as exc:
+        if exc.status_code in {401, 404}:
+            raise
+        await socket.send_json({"type": "error", "code": exc.detail, "request_key": str(body.request_key)})
+        return
+    await socket.send_json(jsonable_encoder({
+        "type": "ack", "request_key": body.request_key, "message": message,
+    }))
+
+
 @app.websocket("/v1/chats/{chat}/live")
 async def live(socket: WebSocket, chat: UUID, after: int = 0):
     if socket.headers.get("origin") not in origins or not 0 <= after <= 2**63-1:
         await socket.close(code=1008)
         return
+    incoming = wakeup = None
     try:
-        batch = await run_in_threadpool(live_messages, socket, chat, after)
-        await socket.accept()
-        while True:
-            for item in batch:
-                await socket.send_json(jsonable_encoder(item))
-                after = item["seq"]
-            try:
-                event = await asyncio.wait_for(socket.receive(), timeout=0.5)
-                if event["type"] == "websocket.disconnect":
-                    return
-                await socket.close(code=1008)
-                return
-            except asyncio.TimeoutError:
+        with socket.app.state.signals.room(chat) as signal:
+            batch = await run_in_threadpool(live_messages, socket, chat, after)
+            await socket.accept(headers=[(b"x-messenger-instance", INSTANCE.encode())])
+            incoming = asyncio.create_task(socket.receive())
+            while True:
+                for item in batch:
+                    await socket.send_json(jsonable_encoder(item))
+                    after = item["seq"]
+                wakeup = asyncio.create_task(signal.wait())
+                await asyncio.wait({incoming, wakeup}, timeout=0 if len(batch) == 100 else REPLAY_INTERVAL,
+                                   return_when=asyncio.FIRST_COMPLETED)
+                wakeup.cancel()
+                with suppress(asyncio.CancelledError):
+                    await wakeup
+                if incoming.done():
+                    event = incoming.result()
+                    if event["type"] == "websocket.disconnect":
+                        return
+                    await handle_socket_message(socket, chat, event)
+                    incoming = asyncio.create_task(socket.receive())
+                signal.clear()
                 batch = await run_in_threadpool(live_messages, socket, chat, after)
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, OSError):
         return
     except HTTPException:
         await socket.close(code=1008)
+    finally:
+        for task in (incoming, wakeup):
+            if task and not task.done():
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
 
 
 static = Path(os.getenv("STATIC_DIR", "/app/web"))
