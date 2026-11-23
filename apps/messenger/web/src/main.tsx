@@ -42,9 +42,51 @@ function SignIn({ onAccount }: { onAccount: (account: Account) => void }) {
   </form></main>
 }
 
+function MessageSearch({ chat, close }: { chat: string; close: () => void }) {
+  const [draft, setDraft] = useState('')
+  const [term, setTerm] = useState('')
+  const [result, setResult] = useState<Page>()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  async function search(filter: string, before?: number) {
+    setBusy(true)
+    setError('')
+    if (!before) { setTerm(filter); setResult(undefined) }
+    const params = new URLSearchParams({ q: filter })
+    if (before) params.set('before', String(before))
+    try {
+      const page = await api<Page>('/chats/' + chat + '/messages?' + params)
+      setResult(previous => before && previous
+        ? { messages: [...page.messages, ...previous.messages], before: page.before } : page)
+    } catch (err) { setError(describe(err)) }
+    finally { setBusy(false) }
+  }
+
+  return <div className="thread" aria-label="Message search results">
+    <form className="message-search" onSubmit={event => {
+      event.preventDefault()
+      if (draft.trim() && !busy) void search(draft.trim())
+    }}>
+      <input aria-label="Search messages" type="search" maxLength={100} value={draft}
+        onChange={event => setDraft(event.target.value)} />
+      <button disabled={busy || !draft.trim()}>Search</button>
+      <button type="button" onClick={close}>Close</button>
+    </form>
+    {error && <p role="alert">{error}</p>}
+    {busy && <p role="status">Searching messages...</p>}
+    {result?.before && <button disabled={busy} onClick={() => search(term, result.before!)}>Earlier matches</button>}
+    {result && !result.messages.length && <p>No matching messages.</p>}
+    {result?.messages.map(message => <article key={message.seq}>
+      <small>{message.sender}</small><p>{message.content}</p>
+    </article>)}
+  </div>
+}
+
 function Workspace({ account, onLogout }: { account: Account; onLogout: () => void }) {
   const [chats, setChats] = useState<Chat[]>([])
   const [query, setQuery] = useState('')
+  const [searchingMessages, setSearchingMessages] = useState(false)
   const [selected, setSelected] = useState('')
   const [messages, setMessages] = useState<Message[]>([])
   const [before, setBefore] = useState<number | null>(null)
@@ -120,11 +162,12 @@ function Workspace({ account, onLogout }: { account: Account; onLogout: () => vo
     }
   }, [selected])
 
-  useEffect(() => { bottom.current?.scrollIntoView({ block: 'end' }) }, [messages.at(-1)?.seq])
+  useEffect(() => { bottom.current?.scrollIntoView({ block: 'end' }) }, [messages.at(-1)?.seq, searchingMessages])
 
   function select(id: string) {
     if (view.current === id) return
     view.current = id
+    setSearchingMessages(false)
     setMessages([])
     setBefore(null)
     setConnected(false)
@@ -235,7 +278,11 @@ function Workspace({ account, onLogout }: { account: Account; onLogout: () => vo
         <header><button className="back" onClick={() => select('')}>Chats</button>
           <div><h1>{current?.title ?? 'Chat'}</h1>
             <small>{current?.contacts.filter(email => email !== account.email).join(', ')}</small></div>
+          <button type="button" aria-expanded={searchingMessages} onClick={() => setSearchingMessages(value => !value)}>
+            Find messages
+          </button>
           <span className="presence" role="status">{connected ? 'Live' : 'Connecting…'}</span></header>
+        {searchingMessages ? <MessageSearch key={selected} chat={selected} close={() => setSearchingMessages(false)} /> : <>
         <div className="thread" aria-label="Messages">
           {before && <button onClick={loadOlder} disabled={busy}>Load earlier messages</button>}
           {!messages.length && <p className="muted">Start the conversation with a message.</p>}
@@ -249,6 +296,7 @@ function Workspace({ account, onLogout }: { account: Account; onLogout: () => vo
         <form className="compose" onSubmit={send}><input aria-label="Message" value={draft}
           maxLength={4000} placeholder="Write a message" onChange={event => setDraft(event.target.value)} />
           <button className="primary" disabled={!draft.trim() || busy}>Send</button></form>
+        </>}
       </> : <div className="empty"><h1>Your messages</h1><p>Choose a chat or start one with a contact.</p></div>}
       {error && <p className="notice" role="alert">{error}</p>}
     </section>

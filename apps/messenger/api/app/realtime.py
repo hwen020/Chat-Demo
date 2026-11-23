@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import os
 from collections import defaultdict
@@ -19,6 +20,8 @@ class Signals:
         self.listeners: dict[str, set[asyncio.Event]] = defaultdict(set)
         self.subscribed = False
         self.notifications = 0
+        self.publish_errors = 0
+        self.queue_dropped = 0
         self.outbound: asyncio.Queue[str] = asyncio.Queue(maxsize=128)
         self.loop: asyncio.AbstractEventLoop | None = None
 
@@ -43,8 +46,10 @@ class Signals:
         for listener in self.listeners.get(key, ()):
             listener.set()
         if self.subscribed:
-            with suppress(asyncio.QueueFull):
+            try:
                 self.outbound.put_nowait(key)
+            except asyncio.QueueFull:
+                self.queue_dropped += 1
 
     async def publish(self):
         async with AsyncRedis.from_url(REDIS_URL, socket_connect_timeout=0.25, socket_timeout=0.25) as client:
@@ -54,7 +59,8 @@ class Signals:
                     async with asyncio.timeout(0.5):
                         await client.publish(CHANNEL, key)
                 except (RedisError, OSError, TimeoutError):
-                    log.debug("Redis notification unavailable; replay remains active")
+                    self.publish_errors += 1
+                    log.debug(json.dumps({"event": "redis_publish_failed", "instance": INSTANCE}))
 
     async def listen(self):
         async with AsyncRedis.from_url(
@@ -75,6 +81,8 @@ class Signals:
                                 for listener in self.listeners.get(event["data"], ()):
                                     listener.set()
                 except (RedisError, OSError):
+                    if self.subscribed:
+                        log.warning(json.dumps({"event": "redis_subscription_lost", "instance": INSTANCE}))
                     self.subscribed = False
                     await asyncio.sleep(0.5)
                 finally:

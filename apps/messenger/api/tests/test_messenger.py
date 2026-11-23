@@ -66,3 +66,21 @@ def test_session_revocation(accounts):
     assert alice.post("/v1/auth/logout").status_code == 204
     assert alice.get("/v1/chats").status_code == 401
     assert alice.post("/v1/auth/login", json={"email": alice.email, "password": PASSWORD}).status_code == 200
+
+
+def test_message_search_cursor_and_isolation(accounts):
+    alice, bob, outsider = accounts
+    chat = alice.post("/v1/chats", json={"emails": [bob.email]}).json()["id"]
+    path = f"/v1/chats/{chat}/messages"
+    for index in range(53):
+        content = f"Plan_100% {index}" if index < 52 else "unrelated"
+        response = alice.post(path, json={"content": content, "request_key": str(uuid4())})
+        assert response.status_code == 201
+    first = bob.get(path, params={"q": " PLAN_100% "}).json()
+    assert len(first["messages"]) == 50 and first["before"]
+    rest = bob.get(path, params={"q": "plan_100%", "before": first["before"]}).json()
+    assert [item["content"] for item in rest["messages"]] == ["Plan_100% 0", "Plan_100% 1"]
+    assert rest["before"] is None
+    assert outsider.get(path, params={"q": "plan"}).status_code == 404
+    assert bob.get(path, params={"q": "x" * 101}).status_code == 422
+    assert "messenger_redis_publish_errors_total" in bob.get("/metrics").text

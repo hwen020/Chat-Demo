@@ -50,6 +50,7 @@ jobs:
         working-directory: apps/messenger/web
       - run: npm test -- --reporter=list
         working-directory: apps/messenger/web
+      - run: docker compose -p chatflow-messenger-ci -f docker-compose.yml -f services/messenger/test.compose.yml exec -T messenger-db sh -s -- messenger < services/verify-backup.sh
       - if: always()
         run: |
           docker compose -p chatflow-messenger-ci -f docker-compose.yml -f services/messenger/test.compose.yml logs --no-color > messenger.log

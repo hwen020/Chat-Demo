@@ -54,10 +54,11 @@ jobs:
           done
           cat api.log
           exit 1
-      - run: python -m pytest -q --junitxml=../../../pytest-results.xml
+      - run: python -m pytest -q -rP --junitxml=../../../pytest-results.xml
         working-directory: apps/ai-chat/api
       - run: npm test -- --reporter=list,html
         working-directory: apps/ai-chat/web
+      - run: docker exec -i ${{ job.services.postgres.id }} sh -s -- ai-chat < services/verify-backup.sh
       - run: docker compose config --quiet && docker compose build api
       - uses: actions/upload-artifact@v4
         if: always()

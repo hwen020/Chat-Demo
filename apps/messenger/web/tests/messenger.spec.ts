@@ -3,7 +3,8 @@ import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 
 test('contacts can exchange messages live and open a group', async ({ browser }, info) => {
-  const options = { baseURL: info.project.use.baseURL }
+  const { baseURL, viewport, isMobile, hasTouch } = info.project.use
+  const options = { baseURL, viewport, isMobile, hasTouch }
   const alice = await browser.newPage(options)
   const bob = await browser.newPage(options)
   const carol = await browser.newPage(options)
@@ -58,9 +59,17 @@ test('contacts can exchange messages live and open a group', async ({ browser },
     await expect(alice.locator('.thread article p')).toHaveText([
       'Can we review the demo this afternoon?', peerMessage, ownMessage,
     ])
+    await alice.getByRole('button', { name: 'Find messages' }).click()
+    await alice.getByRole('searchbox', { name: 'Search messages' }).fill('AGENDA')
+    await alice.getByRole('button', { name: 'Search', exact: true }).click()
+    const result = alice.getByLabel('Message search results')
+    await expect(result.getByText(peerMessage)).toBeVisible()
+    await expect(result.getByText(ownMessage)).toHaveCount(0)
+    await result.getByRole('button', { name: 'Close' }).click()
     await bob.reload()
     await bob.getByRole('navigation').getByRole('button', { name: new RegExp(email('alex')) }).click()
     await expect(bob.getByText('Can we review the demo this afternoon?')).toBeVisible()
+    if (isMobile) await alice.getByRole('button', { name: 'Chats', exact: true }).click()
     await alice.getByRole('button', { name: 'New chat' }).click()
     await alice.getByLabel('Contact emails').fill([email('sam'), email('avery')].join(', '))
     await alice.getByLabel('Group name').fill('Design review')
@@ -75,6 +84,7 @@ test('contacts can exchange messages live and open a group', async ({ browser },
     await carol.getByRole('textbox', { name: 'Message', exact: true }).fill('Thanks, I will walk through the mobile views.')
     await carol.getByRole('button', { name: 'Send' }).click()
     await expect(alice.getByText('Thanks, I will walk through the mobile views.')).toBeVisible()
+    expect(await alice.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport!.width)
     await alice.screenshot({ path: info.outputPath('messenger.png') })
   } finally {
     await Promise.all([alice.close(), bob.close(), carol.close()])

@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
@@ -153,20 +154,33 @@ def test_context_edit_retry_delete_and_restore(accounts, monkeypatch):
         "content": "unknown model", "model": "unconfigured", "request_key": str(uuid4()),
     }).status_code == 422
 
-    def complete(response):
+    timings = []
+
+    def complete(submit):
+        started = time.perf_counter()
+        response = submit()
         assert response.status_code == 202, response.text
         with a.stream("GET", path + "/generations/" + response.json()["id"] + "/events") as stream:
-            events = list(frames(stream))
+            events = []
+            first_delta = None
+            for frame in frames(stream):
+                events.append(frame)
+                if frame[1] == "delta" and first_delta is None:
+                    first_delta = time.perf_counter()
+        assert first_delta is not None
         assert events[-1][1] == "done"
+        timings.append({"first_delta_ms": round((first_delta - started) * 1000, 1),
+                        "complete_ms": round((time.perf_counter() - started) * 1000, 1)})
         return "".join(payload["text"] for _, kind, payload in events if kind == "delta")
 
-    assert "turn 1" in complete(start(a, path))
-    assert "turn 2" in complete(start(a, path))
+    assert "turn 1" in complete(lambda: start(a, path))
+    assert "turn 2" in complete(lambda: start(a, path))
     original = a.get(path + "/messages").json()["messages"]
     edit_path = path + "/regenerate/" + original[-2]["id"]
     replacement = {"content": "Edited second prompt", "request_key": str(uuid4()), "model": "mock"}
     assert b.post(edit_path, json=replacement).status_code == 404
-    assert "turn 2" in complete(a.post(edit_path, json=replacement))
+    assert "turn 2" in complete(lambda: a.post(edit_path, json=replacement))
+    print("Mock SSE client timings:", json.dumps(timings))
     assert a.post(edit_path, json=replacement).status_code == 202
     updated = a.get(path + "/messages").json()["messages"]
     assert len(updated) == 4

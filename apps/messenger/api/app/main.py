@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import PlainTextResponse
 from pydantic import Field, ValidationError, field_validator
 from starlette.concurrency import run_in_threadpool
 
@@ -45,6 +46,19 @@ def ready():
     signals = app.state.signals
     return {"status": "ready", "instance": INSTANCE, "redis_subscribed": signals.subscribed,
             "redis_notifications": signals.notifications}
+
+
+@app.get("/metrics", include_in_schema=False)
+async def metrics():
+    signals = app.state.signals
+    values = {
+        "messenger_websocket_active": sum(len(room) for room in signals.listeners.values()),
+        "messenger_redis_subscribed": int(signals.subscribed),
+        "messenger_redis_notifications_total": signals.notifications,
+        "messenger_redis_publish_errors_total": signals.publish_errors,
+        "messenger_redis_queue_dropped_total": signals.queue_dropped,
+    }
+    return PlainTextResponse("".join(f"{name} {value}\n" for name, value in values.items()))
 
 
 def member(conn, chat, account):
@@ -111,11 +125,12 @@ MESSAGE_SELECT = """SELECT m.seq,m.sender_id,u.email AS sender,m.content,m.creat
 
 @app.get("/v1/chats/{chat}/messages")
 def history(chat: UUID, before: Annotated[int | None, Query(ge=1, le=2**63-1)] = None,
-            account=Depends(user)):
+            q: Annotated[str, Query(max_length=100)] = "", account=Depends(user)):
     with engine.connect() as conn:
         member(conn, chat, account)
-        items = rows(conn, MESSAGE_SELECT + " AND m.seq<:before ORDER BY m.seq DESC LIMIT 51",
-                     chat=chat, before=before or 2**63-1)
+        items = rows(conn, MESSAGE_SELECT + """
+            AND m.seq<:before AND (:term='' OR strpos(lower(m.content), lower(:term))>0)
+            ORDER BY m.seq DESC LIMIT 51""", chat=chat, before=before or 2**63-1, term=q.strip())
     return {"messages": [dict(item) for item in reversed(items[:50])],
             "before": items[49]["seq"] if len(items) > 50 else None}
 

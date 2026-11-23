@@ -117,6 +117,8 @@ async def exercise(project):
         )
         assert before_a["instance"] == "api-a" and before_b["instance"] == "api-b"
         await await_status(proxy, lambda status: status["status"] == "ready")
+        assert (await proxy.get("/metrics")).status_code == 404
+        assert "messenger_redis_subscribed 1" in (await alice.get("/metrics")).text
         servers = {(await proxy.get("/readyz")).json()["instance"] for _ in range(8)}
         assert servers == {"api-a", "api-b"}, servers
         a, b, c, _ = await asyncio.gather(*(account(client) for client in (alice, bob, carol, outsider)))

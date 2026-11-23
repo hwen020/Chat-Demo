@@ -49,3 +49,6 @@ article p { white-space: pre-wrap; }
   .new-chat { margin: .5rem auto; }
   .back { display: inline-block; }
 }
+
+.message-search { display: flex; flex-wrap: wrap; gap: 8px; }
+.message-search input { flex: 1; min-width: 0; }

@@ -4,7 +4,7 @@ A real-time messaging application for direct and group conversations. React and 
 
 ## Quick start
 
-From the repository root, run `docker compose up --build messenger` and open [Messenger](http://127.0.0.1:8081). Register two synthetic accounts in separate browser profiles, then start a chat with the other account's email. For a group conversation, enter multiple registered email addresses and a group name.
+From the repository root, run `docker compose up --build messenger` and open [Messenger](http://127.0.0.1:8081). Register two synthetic accounts in separate browser profiles, then start a chat with the other account's email. For a group conversation, enter multiple registered email addresses and a group name. Use **Find messages** inside a chat to search its message text. Earlier matches use the same sequence cursor as history.
 
 Set the Compose values listed in [.env.example](.env.example) through the shell, a root `.env` file or `docker compose --env-file apps/messenger/.env …`. Compose keeps PostgreSQL private and uses the dedicated `chatflow_messenger_database` volume. `docker compose stop messenger messenger-api-a messenger-api-b messenger-redis messenger-db` stops the Messenger stack.
 
@@ -42,4 +42,4 @@ The override publishes test-only API ports 18091 and 18092, configurable through
 
 ## Deploy
 
-From the repository root, build with `docker build -f apps/messenger/Dockerfile -t chatflow-messenger .`. Provide Messenger-only PostgreSQL and Redis services. Set `DATABASE_URL`, `MESSENGER_REDIS_URL` and the exact HTTPS `APP_ORIGINS` on both replicas. Assign distinct `MESSENGER_INSTANCE` names and keep `COOKIE_SECURE=1`. Run `alembic upgrade head` once before starting the replicas. Configure the Nginx upstream addresses and terminate TLS at the deployment ingress. Forward HTTP and WebSocket upgrades to API port 8000. Check `/healthz` and `/readyz`. See [architecture](../../docs/messenger/architecture.md).
+From the repository root, build with `docker build -f apps/messenger/Dockerfile -t chatflow-messenger .`. Provide Messenger-only PostgreSQL and Redis services. Set `DATABASE_URL`, `MESSENGER_REDIS_URL` and the exact HTTPS `APP_ORIGINS` on both replicas. Assign distinct `MESSENGER_INSTANCE` names and keep `COOKIE_SECURE=1`. Run `alembic upgrade head` once before starting the replicas. Configure the Nginx upstream addresses and terminate TLS at the deployment ingress. Forward HTTP and WebSocket upgrades to API port 8000. Check `/healthz` and `/readyz`. Scrape `/metrics` on each private API instance for socket and Redis signal counters. Nginx blocks this route on the public listener. See [architecture](../../docs/messenger/architecture.md).

@@ -34,6 +34,8 @@ docs/ai-chat/               AI architecture, baseline records and demo capture
 
 Each application has a separate session cookie and PostgreSQL database. The AI Compose service retains the original `chatflow` project name, `api` and `db` service names, port 8080 and existing `chatflow_database` volume. Messenger uses `chatflow_messenger_database`. The original v1.1 baseline remains available on `feat/fullstack-rebuild`. See [verification](docs/verification.md), [Messenger acceptance](docs/messenger/acceptance.md) and [AI Chat acceptance](docs/ai-chat/acceptance.md) for evidence.
 
+See the [technical coverage audit](docs/coverage-audit.md) for evidence and maintenance boundaries.
+
 ## Screenshots
 
 ### Messenger
