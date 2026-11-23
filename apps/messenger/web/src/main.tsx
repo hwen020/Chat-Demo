@@ -1,0 +1,231 @@
+import { useEffect, useRef, useState } from 'react'
+import type { FormEvent } from 'react'
+import { createRoot } from 'react-dom/client'
+import { api, ApiError } from './api'
+import './styles.css'
+
+type Account = { id: string; email: string }
+type Chat = { id: string; title: string; contacts: string[]; group_chat: boolean }
+type Message = { seq: number; sender_id: string; sender: string; content: string; created_at: string }
+type Page = { messages: Message[]; before: number | null }
+const describe = (error: unknown) => error instanceof ApiError
+  ? error.code.replaceAll('_', ' ') : 'Connection failed. Try again.'
+
+function SignIn({ onAccount }: { onAccount: (account: Account) => void }) {
+  const [register, setRegister] = useState(false)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    setBusy(true)
+    setError('')
+    try {
+      onAccount(await api<Account>(register ? '/auth/register' : '/auth/login', 'POST', Object.fromEntries(form)))
+    } catch (err) { setError(describe(err)) } finally { setBusy(false) }
+  }
+  return <main className="sign-in"><form onSubmit={submit}>
+    <div className="brand">ChatFlow Messenger</div>
+    <h1>{register ? 'Create an account' : 'Sign in'}</h1>
+    <label>Email<input name="email" type="email" required autoComplete="email" /></label>
+    <label>Password<input name="password" type="password" minLength={10} required
+      autoComplete={register ? 'new-password' : 'current-password'} /></label>
+    {error && <p role="alert">{error}</p>}
+    <button className="primary" disabled={busy}>{register ? 'Register' : 'Sign in'}</button>
+    <button type="button" onClick={() => { setRegister(!register); setError('') }}>
+      {register ? 'Use an existing account' : 'Create an account'}
+    </button>
+  </form></main>
+}
+
+function Workspace({ account, onLogout }: { account: Account; onLogout: () => void }) {
+  const [chats, setChats] = useState<Chat[]>([])
+  const [query, setQuery] = useState('')
+  const [selected, setSelected] = useState('')
+  const [messages, setMessages] = useState<Message[]>([])
+  const [before, setBefore] = useState<number | null>(null)
+  const [draft, setDraft] = useState('')
+  const [error, setError] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [connected, setConnected] = useState(false)
+  const current = chats.find(chat => chat.id === selected)
+  const view = useRef('')
+  const pending = useRef<{ chat: string; content: string; request_key: string } | null>(null)
+  const bottom = useRef<HTMLDivElement>(null)
+
+  function refresh(filter: string, signal?: AbortSignal) {
+    return api<Chat[]>('/chats?q=' + encodeURIComponent(filter), 'GET', undefined, signal)
+  }
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const load = () => refresh(query, controller.signal).then(items => {
+      if (!controller.signal.aborted) setChats(items)
+    }).catch(err => { if (!controller.signal.aborted) setError(describe(err)) })
+    void load()
+    const timer = window.setInterval(load, 4000)
+    return () => { controller.abort(); window.clearInterval(timer) }
+  }, [query])
+
+  useEffect(() => {
+    if (!selected) return
+    const controller = new AbortController()
+    const path = '/chats/' + selected
+    let socket: WebSocket | undefined
+    let timer: number | undefined
+    let cursor = 0
+    let reconnectDelay = 1000
+    function connect() {
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
+      socket = new WebSocket(protocol + '//' + location.host + '/v1' + path + '/live?after=' + cursor)
+      socket.onopen = () => { reconnectDelay = 1000; setConnected(true) }
+      socket.onmessage = event => {
+        if (controller.signal.aborted) return
+        const message = JSON.parse(event.data) as Message
+        cursor = Math.max(cursor, message.seq)
+        setMessages(items => items.some(item => item.seq === message.seq) ? items : [...items, message])
+      }
+      socket.onclose = () => {
+        if (controller.signal.aborted) return
+        setConnected(false)
+        timer = window.setTimeout(connect, reconnectDelay)
+        reconnectDelay = Math.min(15000, reconnectDelay * 2)
+      }
+    }
+    api<Page>(path + '/messages', 'GET', undefined, controller.signal).then(page => {
+      if (controller.signal.aborted) return
+      setMessages(page.messages)
+      setBefore(page.before)
+      cursor = page.messages.at(-1)?.seq ?? 0
+      connect()
+    }).catch(err => { if (!controller.signal.aborted) setError(describe(err)) })
+    return () => { controller.abort(); socket?.close(); window.clearTimeout(timer) }
+  }, [selected])
+
+  useEffect(() => { bottom.current?.scrollIntoView({ block: 'end' }) }, [messages.at(-1)?.seq])
+
+  function select(id: string) {
+    if (view.current === id) return
+    view.current = id
+    setMessages([])
+    setBefore(null)
+    setConnected(false)
+    setDraft('')
+    setError('')
+    setSelected(id)
+  }
+
+  async function create(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    const emails = String(form.get('contacts')).split(/[\s,]+/).filter(Boolean)
+    setBusy(true)
+    setError('')
+    try {
+      const chat = await api<{ id: string }>('/chats', 'POST', { emails, title: form.get('title') })
+      setQuery('')
+      setChats(await refresh(''))
+      setCreating(false)
+      select(chat.id)
+    } catch (err) { setError(describe(err)) } finally { setBusy(false) }
+  }
+
+  async function send(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const content = draft.trim()
+    if (!content || !selected || busy) return
+    const prior = pending.current
+    const request = prior?.chat === selected && prior.content === content
+      ? prior : { chat: selected, content, request_key: crypto.randomUUID() }
+    pending.current = request
+    setBusy(true)
+    setError('')
+    try {
+      const message = await api<Message>('/chats/' + selected + '/messages', 'POST',
+        { content, request_key: request.request_key })
+      pending.current = null
+      if (view.current === selected) {
+        setDraft(value => value.trim() === content ? '' : value)
+        setMessages(items => items.some(item => item.seq === message.seq) ? items
+          : [...items, message].sort((a, b) => a.seq - b.seq))
+      }
+    } catch (err) { if (view.current === selected) setError(describe(err)) }
+    finally { setBusy(false) }
+  }
+
+  async function loadOlder() {
+    if (!before || busy) return
+    setBusy(true)
+    try {
+      const page = await api<Page>('/chats/' + selected + '/messages?before=' + before)
+      if (view.current === selected) {
+        setMessages(items => [...page.messages, ...items])
+        setBefore(page.before)
+      }
+    } catch (err) { setError(describe(err)) } finally { setBusy(false) }
+  }
+
+  return <main className={'messenger' + (selected && !creating ? ' chat-open' : '')}>
+    <aside>
+      <div className="rail-header"><div className="brand">ChatFlow Messenger</div>
+        <button onClick={() => { setCreating(!creating); setError('') }}>{creating ? 'Cancel' : 'New chat'}</button></div>
+      <label className="search">Search chats<input type="search" placeholder="Name or contact" value={query}
+        onChange={event => setQuery(event.target.value)} /></label>
+      <nav aria-label="Chats">
+        {chats.map(chat => <button key={chat.id} aria-current={chat.id === selected} onClick={() => {
+          setCreating(false); select(chat.id)
+        }}><span className="avatar" aria-hidden="true">{chat.title.slice(0, 1).toUpperCase()}</span>
+          <span><strong>{chat.title}</strong><small>{chat.group_chat ? 'Group' : 'Direct message'}</small></span>
+        </button>)}
+        {!chats.length && <p className="muted">No chats found.</p>}
+      </nav>
+      <footer><small>{account.email}</small><button onClick={() => {
+        api('/auth/logout', 'POST', {}).then(onLogout).catch(err => setError(describe(err)))
+      }}>Sign out</button></footer>
+    </aside>
+    <section className="conversation">
+      {creating ? <form className="new-chat" onSubmit={create}>
+        <h1>New chat</h1>
+        <label>Contact emails<input name="contacts" placeholder="alex@example.com, sam@example.com" required /></label>
+        <label>Group name<input name="title" placeholder="Required for multiple contacts" maxLength={100} /></label>
+        <button className="primary" disabled={busy}>Start chat</button>
+      </form> : selected ? <>
+        <header><button className="back" onClick={() => select('')}>Chats</button>
+          <div><h1>{current?.title ?? 'Chat'}</h1>
+            <small>{current?.contacts.filter(email => email !== account.email).join(', ')}</small></div>
+          <span className="presence" role="status">{connected ? 'Live' : 'Connecting…'}</span></header>
+        <div className="thread" aria-label="Messages">
+          {before && <button onClick={loadOlder} disabled={busy}>Load earlier messages</button>}
+          {!messages.length && <p className="muted">Start the conversation with a message.</p>}
+          {messages.map(message => <article key={message.seq} className={message.sender_id === account.id ? 'mine' : ''}>
+            <small>{message.sender_id === account.id ? 'You' : message.sender} · {
+              new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            }</small><p>{message.content}</p>
+          </article>)}
+          <div ref={bottom} />
+        </div>
+        <form className="compose" onSubmit={send}><input aria-label="Message" value={draft}
+          maxLength={4000} placeholder="Write a message" onChange={event => setDraft(event.target.value)} />
+          <button className="primary" disabled={!draft.trim() || busy}>Send</button></form>
+      </> : <div className="empty"><h1>Your messages</h1><p>Choose a chat or start one with a contact.</p></div>}
+      {error && <p className="notice" role="alert">{error}</p>}
+    </section>
+  </main>
+}
+
+function App() {
+  const [account, setAccount] = useState<Account | null>()
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    api<Account>('/me').then(setAccount).catch(err => {
+      if (err instanceof ApiError && err.status === 401) setAccount(null)
+      else setFailed(true)
+    })
+  }, [])
+  if (failed) return <main className="sign-in"><p role="alert">Messenger could not connect. <button onClick={() => location.reload()}>Retry</button></p></main>
+  if (account === undefined) return <main className="sign-in" role="status">Loading Messenger…</main>
+  return account ? <Workspace account={account} onLogout={() => setAccount(null)} /> : <SignIn onAccount={setAccount} />
+}
+
+createRoot(document.getElementById('root')!).render(<App />)

@@ -14,16 +14,46 @@ services:
       timeout: 3s
       retries: 15
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: apps/ai-chat/Dockerfile
     depends_on:
       db:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql+psycopg://chatflow:${CHATFLOW_DB_PASSWORD:-chatflow}@db:5432/chatflow
-      APP_ORIGINS: http://localhost:8080,http://127.0.0.1:8080
+      APP_ORIGINS: http://localhost:${AI_PORT:-8080},http://127.0.0.1:${AI_PORT:-8080}
       COOKIE_SECURE: "0"
     command: ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-access-log"]
     ports:
-      - "127.0.0.1:8080:8000"
+      - "127.0.0.1:${AI_PORT:-8080}:8000"
+  messenger-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: messenger
+      POSTGRES_PASSWORD: ${MESSENGER_DB_PASSWORD:-messenger}
+      POSTGRES_DB: messenger
+    volumes:
+      - messenger_database:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U messenger -d messenger"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+  messenger:
+    build:
+      context: .
+      dockerfile: apps/messenger/Dockerfile
+    depends_on:
+      messenger-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://messenger:${MESSENGER_DB_PASSWORD:-messenger}@messenger-db:5432/messenger
+      APP_ORIGINS: http://localhost:${MESSENGER_PORT:-8081},http://127.0.0.1:${MESSENGER_PORT:-8081}
+      COOKIE_SECURE: "0"
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-access-log"]
+    ports:
+      - "127.0.0.1:${MESSENGER_PORT:-8081}:8000"
 volumes:
   database:
+  messenger_database:

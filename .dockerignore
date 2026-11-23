@@ -8,3 +8,7 @@
 .git
 **/test-results
 **/playwright-report
+**/.env
+**/.env.*
+**/.venv
+**/.local
