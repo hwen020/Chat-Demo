@@ -24,6 +24,8 @@ From `api/`, run `alembic upgrade head` then `uvicorn app.main:app --host 127.0.
 
 With a dedicated running server/database, set `CHATFLOW_TEST_ORIGIN` to an allowed origin and `CHATFLOW_TEST_BASE` to the API base URL. From `api/`, run `python -m pytest -q`. One test explicitly expires replay in the test database. From `web/`, install Chromium with `npx playwright install chromium`, set `CHATFLOW_WEB` to the frontend URL and run `npm test`. Tests exercise desktop and 390px and 320px viewports. GitHub Actions builds the app, applies migrations, and runs both suites on PostgreSQL.
 
+CI uses Ubuntu 24.04 for the locked Playwright version. Dependency installation, the frontend build, and Chromium setup are reported as separate steps.
+
 See [final technical specification](docs/final-spec.md), [architecture](docs/architecture.md), [API](docs/api.md) and [local test report](docs/test-report.md).
 
 ## Deployment configuration

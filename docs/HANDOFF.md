@@ -9,7 +9,7 @@
 
 On a fresh computer with Git, Docker Engine or Desktop, and the Compose plugin:
 
-    git clone --branch feat/fullstack-rebuild https://github.com/hwen020/Chat-Demo.git chatflow
+    git clone --single-branch --branch feat/fullstack-rebuild https://github.com/hwen020/Chat-Demo.git chatflow
     cd chatflow
     git rev-parse HEAD
     docker compose up --build
@@ -29,4 +29,6 @@ Original React/TypeScript UI, FastAPI/PostgreSQL, account registration and revoc
 
 Release worktree verification: Alembic 0001 on fresh PostgreSQL passed, 7 Pytest tests passed, TypeScript/Vite build passed, and 3 Playwright tests passed at 1440, 390 and 320 px. Docker engine was unavailable on the verification machine, so local container startup was not tested. See test-report.md for specifics. GitHub Actions results are per commit and should be checked on the repository Actions page.
 
-Follow-up: validate container startup in Docker, confirm the branch CI run, and only then consider a real model adapter and server-side usage limits. Replay is available for 15 minutes after completion; after expiry the UI reads saved history. The model remains Mock, and production hosting is out of scope.
+The release baseline CI stopped at the combined frontend build and Chromium setup step on `ubuntu-latest`. The workflow pins Ubuntu 24.04 for Playwright 1.52 and gives each setup command its own step. Check the CI job for the exact commit before treating the pipeline as verified.
+
+Replay is available for 15 minutes after completion. After expiry the UI reads saved history. The model remains Mock, and production hosting is out of scope.
