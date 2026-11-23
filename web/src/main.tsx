@@ -62,6 +62,7 @@ function Auth({ onAccount }: { onAccount: (account: Account) => void }) {
 
 function Workspace({ account, logout }: { account: Account; logout: () => void }) {
   const [conversations, setConversations] = useState<Conversation[]>([])
+  const [search, setSearch] = useState('')
   const [selected, setSelected] = useState('')
   const [messages, setMessages] = useState<Message[]>([])
   const [before, setBefore] = useState<number | null>(null)
@@ -80,6 +81,8 @@ function Workspace({ account, logout }: { account: Account; logout: () => void }
   const stream = useRef<AbortController | null>(null)
   const selectedRef = useRef('')
   const current = conversations.find(item => item.id === selected)
+  const query = search.trim().toLowerCase()
+  const matchingConversations = conversations.filter(item => item.title.toLowerCase().includes(query))
   const storageKey = (id: string) => 'chatflow:pending:' + account.id + ':' + id
   const base = (id: string) => '/conversations/' + id
 
@@ -200,6 +203,7 @@ function Workspace({ account, logout }: { account: Account; logout: () => void }
   async function create() {
     try {
       const item = await api<Conversation>('/conversations', 'POST', { title: 'New conversation' })
+      setSearch('')
       setConversations(items => [item, ...items]); select(item.id)
     } catch (err) { setError(messageFor(err)) }
   }
@@ -261,8 +265,11 @@ function Workspace({ account, logout }: { account: Account; logout: () => void }
       <div className="sidebar-heading"><Brand /><button className="drawer-close"
         aria-label="Close conversations" onClick={() => setMobile(false)}>Close</button></div>
       <button className="new-chat" onClick={create}><span aria-hidden="true">＋</span> New conversation</button>
+      <input className="conversation-search" type="search" aria-label="Search conversations"
+        placeholder="Search conversations" value={search} onChange={event => setSearch(event.target.value)} />
       <nav aria-label="Conversation history">
-        {conversations.map(item => <button key={item.id} type="button" onClick={() => select(item.id)}
+        {query && !matchingConversations.length && <p className="search-empty">No matching conversations</p>}
+        {matchingConversations.map(item => <button key={item.id} type="button" onClick={() => select(item.id)}
           aria-current={item.id === selected ? 'page' : undefined}>
           <span aria-hidden="true">◌</span><span>{item.title}</span>
         </button>)}

@@ -14,3 +14,9 @@ The Pytest run produced a JUnit report in the local temporary directory. Playwri
 ## Release branch verification
 
 Rebuilt from the clean dependency lock in the Chat-Demo release worktree. A fresh PostgreSQL database migrated to 0001. Pytest: 7 passed (5.11 s). TypeScript and Vite build: passed. Playwright: 3 passed (20.9 s), covering 1440, 390 and 320 px. Docker engine unavailable, so container startup remains untested locally.
+
+## Windows recovery and v1.1 title search
+
+On 2026-11-23, Docker Desktop 4.26.0 and Compose 2.23.3 built and started ChatFlow with PostgreSQL 17 and Python 3.12. PostgreSQL reported healthy, Alembic reported `0001 (head)`, the liveness and readiness probes passed, and the frontend returned HTTP 200 at http://127.0.0.1:8080.
+
+The v1.1 rebuild passed TypeScript and Vite. Pytest passed 7 of 7 against the Compose API and its local database. Playwright passed 3 of 3 using Edge on Windows at 1440, 320 and 390 px, including Mock streaming, SSE reconnect, history reload, rename, title filtering, and deletion. Both suites had zero failures and zero skipped tests.

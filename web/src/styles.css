@@ -51,6 +51,12 @@ button { font-weight: 650 }
 .new-chat { text-align: left; border: 1px solid #647670; color: #fcfaf2; border-radius: 10px; padding: 11px 12px; background: #30413c }
 .new-chat:hover, .sidebar nav button:hover { background: #3a4e48 }
 .new-chat span { margin-right: 8px }
+.conversation-search {
+  width: 100%; min-width: 0; margin: -10px 0; border: 1px solid #647670;
+  border-radius: 8px; padding: 9px 10px; background: #263731; color: inherit; color-scheme: dark;
+}
+.conversation-search::placeholder, .search-empty { color: #c2cec6 }
+.search-empty { margin: 7px 9px; font-size: 14px }
 .sidebar nav { display: grid; gap: 4px; align-content: start; min-height: 0; overflow: auto; flex: 1 }
 .sidebar nav button {
   text-align: left; background: transparent; border: 1px solid transparent; color: #e9ebe3;

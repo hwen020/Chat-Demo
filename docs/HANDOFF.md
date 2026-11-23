@@ -32,3 +32,5 @@ Release worktree verification: Alembic 0001 on fresh PostgreSQL passed, 7 Pytest
 The release baseline CI stopped at the combined frontend build and Chromium setup step on `ubuntu-latest`. The workflow pins Ubuntu 24.04 for Playwright 1.52 and gives each setup command its own step. Check the CI job for the exact commit before treating the pipeline as verified.
 
 Replay is available for 15 minutes after completion. After expiry the UI reads saved history. The model remains Mock, and production hosting is out of scope.
+
+The v1.1 sidebar and mobile drawer filter the latest 100 conversations by title. The browser regression covers search, selection, and deletion on desktop and at both mobile widths.

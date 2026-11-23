@@ -12,6 +12,8 @@ docker compose up --build
 
 Open http://127.0.0.1:8080. Register with a test email, create a conversation and send a message. Open a second browser profile to try another account. API docs are at http://127.0.0.1:8080/docs.
 
+Search conversation titles in the sidebar or mobile drawer. The filter is case-insensitive and covers the latest 100 conversations returned by the history API.
+
 Compose binds the app to loopback and keeps PostgreSQL on the Compose network. It creates a named volume and applies Alembic on startup. Use `docker compose down` to stop it while retaining local data. The database password in the Compose example is for local development. The example file lists the optional override.
 
 ### Run against a local PostgreSQL instance
