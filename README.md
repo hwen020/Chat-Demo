@@ -4,7 +4,7 @@ Two independent full-stack applications in one repository. Each ships its own Re
 
 | Application | What it does | Local demo | Guide |
 | --- | --- | --- | --- |
-| ChatFlow Messenger | Direct messages, group chats, searchable contacts and conversations, message history, and authenticated WebSocket delivery | [Messenger](http://127.0.0.1:8081) | [Messenger README](apps/messenger/README.md) |
+| ChatFlow Messenger | Direct messages, group chats, searchable contacts and conversations, message history, Redis Pub/Sub, and authenticated WebSocket delivery across two Nginx-balanced API instances | [Messenger](http://127.0.0.1:8081) | [Messenger README](apps/messenger/README.md) |
 | ChatFlow AI | Multi-turn AI workspace with OpenAI or labeled Mock mode, SSE, model selection, budget limits, and conversation management | [AI Chat](http://127.0.0.1:8080) | [AI Chat README](apps/ai-chat/README.md) |
 
 The links above open the local demos after startup. The repository's GitHub metadata does not list a public homepage or deployment URL.
@@ -24,15 +24,15 @@ Create synthetic accounts to try the apps. Messenger requires a second account t
 ## Architecture
 
 ```text
-apps/messenger/             React UI + FastAPI REST/WebSocket + Messenger migrations
+apps/messenger/             React UI + FastAPI REST/WebSocket + Redis + Messenger migrations
 apps/ai-chat/               React UI + FastAPI REST/SSE + generation worker + AI migrations
 packages/shared/python/     Session authentication, request guards and validation
-services/                   Deployment entry points
+services/messenger/         Nginx proxy and multi-instance failure tests
 docs/messenger/             Messenger architecture and demo capture
 docs/ai-chat/               AI architecture, baseline records and demo capture
 ```
 
-Each application has a separate session cookie and PostgreSQL database. The AI Compose service retains the original `chatflow` project name, `api` and `db` service names, port 8080 and existing `chatflow_database` volume. Messenger uses `chatflow_messenger_database`. The original v1.1 baseline remains available on `feat/fullstack-rebuild`. See [verification](docs/verification.md) for the baseline and release results.
+Each application has a separate session cookie and PostgreSQL database. The AI Compose service retains the original `chatflow` project name, `api` and `db` service names, port 8080 and existing `chatflow_database` volume. Messenger uses `chatflow_messenger_database`. The original v1.1 baseline remains available on `feat/fullstack-rebuild`. See [verification](docs/verification.md), [Messenger acceptance](docs/messenger/acceptance.md) and [AI Chat acceptance](docs/ai-chat/acceptance.md) for evidence.
 
 ## Screenshots
 
