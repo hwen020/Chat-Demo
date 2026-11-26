@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: hwen020-chatflow-messenger-demo
+    runtime: docker
+    plan: free
+    branch: feat/chatflow-monorepo
+    dockerfilePath: ./apps/messenger/Dockerfile
+    dockerContext: .
+    dockerCommand: /bin/sh /app/render-start.sh
+    healthCheckPath: /healthz
+    autoDeployTrigger: "off"
+    envVars:
+      - key: PUBLIC_DEMO
+        value: "1"
+      - key: COOKIE_SECURE
+        value: "1"
+      - key: DATABASE_URL
+        sync: false
+  - type: web
+    name: hwen020-chatflow-ai-demo
+    runtime: docker
+    plan: free
+    branch: feat/chatflow-monorepo
+    dockerfilePath: ./apps/ai-chat/Dockerfile
+    dockerContext: .
+    dockerCommand: /bin/sh /app/render-start.sh
+    healthCheckPath: /healthz
+    autoDeployTrigger: "off"
+    envVars:
+      - key: PUBLIC_DEMO
+        value: "1"
+      - key: COOKIE_SECURE
+        value: "1"
+      - key: DATABASE_URL
+        sync: false

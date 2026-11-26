@@ -1,0 +1,74 @@
+name: Messenger CI
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: messenger
+          POSTGRES_PASSWORD: messenger
+          POSTGRES_DB: messenger
+        ports:
+          - 55433:5432
+        options: >-
+          --health-cmd "pg_isready -U messenger -d messenger"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://messenger:messenger@127.0.0.1:55433/messenger
+      PYTHONPATH: ${{ github.workspace }}/packages/shared/python
+      COOKIE_SECURE: "0"
+      MESSENGER_PORT: "18081"
+      MESSENGER_WEB: http://127.0.0.1:18081
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/messenger/api/requirements*.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/messenger/web/package-lock.json
+      - run: pip install -r requirements-test.txt
+        working-directory: apps/messenger/api
+      - run: alembic upgrade head && python -m pytest -q --junitxml=../../../messenger-results.xml
+        working-directory: apps/messenger/api
+      - run: npm ci && npm run build
+        working-directory: apps/messenger/web
+      - run: |
+          docker compose -p chatflow-messenger-ci -f docker-compose.yml -f services/messenger/test.compose.yml config --quiet
+          docker compose -p chatflow-messenger-ci -f docker-compose.yml -f services/messenger/test.compose.yml up --build -d messenger
+      - shell: bash
+        run: python services/messenger/verify.py chatflow-messenger-ci | tee messenger-distributed.log
+      - run: npx playwright install --with-deps chromium
+        working-directory: apps/messenger/web
+      - run: npm test -- --reporter=list
+        working-directory: apps/messenger/web
+      - run: docker compose -p chatflow-messenger-ci -f docker-compose.yml -f services/messenger/test.compose.yml exec -T messenger-db sh -s -- messenger < services/verify-backup.sh
+      - if: always()
+        run: |
+          docker compose -p chatflow-messenger-ci -f docker-compose.yml -f services/messenger/test.compose.yml logs --no-color > messenger.log
+          docker compose -p chatflow-messenger-ci -f docker-compose.yml -f services/messenger/test.compose.yml down -v
+      - name: Check public demo controls
+        env:
+          PUBLIC_DEMO: "1"
+          COOKIE_SECURE: "1"
+          APP_ORIGINS: https://demo.example.test
+          OPENAI_API_KEY: synthetic-fixture
+        run: python -c "import runpy; runpy.run_path('../../../services/check-public-demo.py', run_name='__main__')"
+        working-directory: apps/messenger/api
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: messenger-test-results
+          path: |
+            messenger-results.xml
+            messenger.log
+            messenger-distributed.log
+            apps/messenger/web/test-results

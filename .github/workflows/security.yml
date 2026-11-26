@@ -1,0 +1,41 @@
+name: Repository security audit
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  secrets:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: |
+          docker run --rm -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/repo \
+            -v "$PWD:/repo:ro" ghcr.io/gitleaks/gitleaks:v8.24.3@sha256:e1b35e12a8c6fa8901f060459cfb6b2fc4c484d3afbe3b029733a3bbfab07055 git /repo --redact=100 --no-banner
+  dependencies:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [messenger, ai-chat]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: npm audit --package-lock-only --audit-level=high
+        working-directory: apps/${{ matrix.app }}/web
+      - run: python -m pip install pip-audit==2.9.0
+      - name: Audit Python production requirements
+        shell: bash
+        working-directory: apps/${{ matrix.app }}/api
+        run: pip-audit -r requirements.txt --progress-spinner off --format json --output audit.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-audit-${{ matrix.app }}
+          path: apps/${{ matrix.app }}/api/audit.json
