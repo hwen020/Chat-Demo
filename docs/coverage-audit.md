@@ -70,5 +70,5 @@ Keep the product workflows and databases independent. Re-run the fault harness a
 
 | Capability | Status | Evidence |
 | --- | --- | --- |
-| Two independently hosted products | Partial | [Blueprint](../render.yaml) and [cloud deployment guide](public-demo.md). Cloud account inventory and actual public URL acceptance await provider authorization. |
+| Two independently hosted products | Implemented | [Messenger](https://hwen020-chatflow-messenger-demo-4olx.onrender.com) and [AI Chat](https://hwen020-chatflow-ai-demo-4olx.onrender.com) run on two Render Free services with separate Neon projects. Public Playwright tests exercised WebSocket and Mock SSE. |
 | Separate Render Static Sites | Missing | The prepared Render candidates serve the existing frontend and API on the same origin. Static-site cross-origin sessions and streams remain unverified. |

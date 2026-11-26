@@ -2,7 +2,7 @@
 
 ## Current status
 
-The repository contains a deployment candidate. Cloud resources and actual public URLs require account access and have not been verified. Local Compose and CI retain separate products and the full Messenger Nginx, Redis and two-instance topology.
+[Messenger](https://hwen020-chatflow-messenger-demo-4olx.onrender.com) and [AI Chat](https://hwen020-chatflow-ai-demo-4olx.onrender.com) are live as separate Render Free web services backed by separate Neon Free projects. Each app serves its UI and API from its own HTTPS origin. Local Compose and CI retain separate products and the full Messenger Nginx, Redis and two-instance topology.
 
 | Product | Local and CI | Prepared public deployment |
 | --- | --- | --- |
