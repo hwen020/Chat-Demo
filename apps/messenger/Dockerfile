@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt && useradd --uid 10001 --crea
 COPY apps/messenger/api/ .
 COPY packages/shared/python/chatflow_shared /app/chatflow_shared
 COPY --from=frontend /src/dist /app/web
+COPY services/render-start.sh /app/render-start.sh
 USER appuser
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log", "--ws-max-size", "32768"]
